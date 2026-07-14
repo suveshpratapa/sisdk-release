@@ -100,7 +100,7 @@ void SubMac::UpdateThreadDirectSlw(bool aEnable, uint32_t aPeriodUs, uint8_t aCh
     if (aEnable)
     {
         mThreadDirectSlwSampleTimeLocal = TimerMicro::GetNow();
-        mThreadDirectSlwSampleTimeRadio = Get<Radio>().GetNow();
+        mThreadDirectSlwSampleTimeRadio = static_cast<uint32_t>(Get<Radio>().GetNow());
         HandleThreadDirectSlwTimer();
     }
     else if (!RadioSupportsReceiveTiming())

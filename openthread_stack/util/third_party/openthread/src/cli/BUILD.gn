@@ -69,6 +69,8 @@ openthread_cli_sources = [
   "cli_srp_server.hpp",
   "cli_tcp.cpp",
   "cli_tcp.hpp",
+  "cli_td.cpp",
+  "cli_td.hpp",
   "cli_udp.cpp",
   "cli_udp.hpp",
   "cli_utils.cpp",

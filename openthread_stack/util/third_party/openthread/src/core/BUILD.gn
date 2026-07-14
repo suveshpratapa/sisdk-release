@@ -460,6 +460,8 @@ openthread_core_files = [
   "common/log.cpp",
   "common/log.hpp",
   "common/logging.hpp",
+  "common/ltvs.cpp",
+  "common/ltvs.hpp",
   "common/message.cpp",
   "common/message.hpp",
   "common/message_allocator.hpp",

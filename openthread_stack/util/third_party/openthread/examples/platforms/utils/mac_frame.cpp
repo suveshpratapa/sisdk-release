@@ -544,7 +544,8 @@ otError otMacFrameProcessTxSfd(otRadioFrame *aFrame, uint64_t aRadioTime, otRadi
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     if (aRadioContext->mCslPresent) // CSL IE should be filled for every transmit attempt
     {
-        otMacFrameSetCslIe(aFrame, aRadioContext->mCslPeriod, ComputeCslPhase(aRadioTime, aRadioContext));
+        otMacFrameSetCslIe(aFrame, aRadioContext->mCslPeriod,
+                           ComputeCslPhase(static_cast<uint32_t>(aRadioTime), aRadioContext));
     }
 #endif
 #if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE) && \
