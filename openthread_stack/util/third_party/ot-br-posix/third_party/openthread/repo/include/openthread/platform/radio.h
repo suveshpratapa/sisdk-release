@@ -374,6 +374,7 @@ typedef struct otRadioFrame
             bool mCsmaCaEnabled : 1;
             bool mCslPresent : 1;          ///< Set to true if CSL header IE is present.
             bool mIsSecurityProcessed : 1; ///< True if SubMac should skip the AES processing of this frame.
+            bool mTxTimestampEnabled : 1;  ///< Set to true to enable TX Timestamp Encoding for this packet, false otherwise.
 
             /**
              * The time of the local radio clock in microseconds when the end of
@@ -382,6 +383,7 @@ typedef struct otRadioFrame
              * The platform should update this field before otPlatRadioTxStarted() is fired for each transmit attempt.
              */
             uint64_t mTimestamp;
+            uint64_t mRxRadioTimestampForForwardingPacket;   // Only applicable for forwarding packets. Radio timestamp when this message is received earlier.
         } mTxInfo;
 
         /**

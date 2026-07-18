@@ -38,6 +38,8 @@
 namespace ot {
 namespace Ip6 {
 
+    RegisterLogModule("IP_UDP");
+
 //---------------------------------------------------------------------------------------------------------------------
 // Udp::SocketHandle
 
@@ -453,7 +455,14 @@ Error Udp::HandleMessage(Message &aMessage, MessageInfo &aMessageInfo)
     SuccessOrExit(error = aMessage.Read(aMessage.GetOffset(), udpHeader));
 
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    if(!ot::TimeSyncService::TimeSyncService::isTimeSyncPacket(aMessage))
+    {
+        SuccessOrExit(error = Checksum::VerifyMessageChecksum(aMessage, aMessageInfo, kProtoUdp));
+    }
+#else
     SuccessOrExit(error = Checksum::VerifyMessageChecksum(aMessage, aMessageInfo, kProtoUdp));
+#endif
 #endif
 
     aMessage.MoveOffset(sizeof(udpHeader));

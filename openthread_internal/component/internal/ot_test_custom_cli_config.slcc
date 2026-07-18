@@ -1,0 +1,17 @@
+id: ot_test_custom_cli_config
+label: OT Internal Custom CLI Config
+package: openthread
+category: OpenThread|Internal
+quality: internal
+description: This component provides the CLI configuration for internal testing.
+provides:
+- name: ot_test_custom_cli_config
+config_file:
+- path: config/sl_openthread_test_custom_cli_config.h
+toolchain_settings:
+- option: preinclude
+  value: sl_openthread_test_custom_cli_config.h
+metadata:
+  sbom:
+    license: Zlib
+root_path: openthread_internal

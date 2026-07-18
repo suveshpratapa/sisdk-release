@@ -1,0 +1,24 @@
+#
+# openthread_internal_app.slsdk
+#
+# This file lists Studio SDK properties pertaining to internal OpenThread app functionality.
+#
+# The version property should be updated to the release version on a
+# release branch, or it should be set to 0.0.0 otherwise. This is the
+# version that Studio displays for the loaded stack.
+#
+# Note: When adding the subLabel below with OpenThread version, please make
+# sure it is a valid GitHub version.  Avoid merge or local commit hashes.
+
+id=com.silabs.sdk.stack.openthread_internal_app
+version=3.0.0.0-iris
+label=OpenThread SDK (internal samples)
+description=Internal OpenThread sample applications
+prop.subLabel=OpenThread (internal)\\ 3.0.0.0-iris\\ (GitHub-61e43cffb)
+
+prop.file.templatesFile=openthread_internal_templates.xml
+prop.file.demosFile=openthread_internal_demos.xml
+prop.useGCCUserObjs=openthread
+prop.partCompatibility=.*efr32m[gr]2.* .*mgm2.* .*simg301.*
+prop.boardCompatibility=.*
+

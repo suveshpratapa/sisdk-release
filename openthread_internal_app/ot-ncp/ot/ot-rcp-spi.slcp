@@ -1,0 +1,72 @@
+project_name: ot-rcp-spi
+label: OpenThread - RCP (SPI)
+package: openthread
+description: >
+  This is a simple OpenThread RCP application. The host application connects to the EFR via a SPI link. This is equivalent to the ot-rcp application in the OpenThread GitHub repo.
+category: OpenThread Examples
+quality: internal
+
+component:
+  - id: sl_main
+  - id: ot_crash_handler
+  - id: ot_stack_rcp
+  - id: ot_ncp_spidrv
+  - id: rail_util_pti
+  - id: bootloader_interface
+  - id: clock_manager
+  - id: ot_reset_utils
+  # Platform - Enable LTO for gcc by installing the following component
+  - id: toolchain_gcc_lto
+
+include:
+  - path: .
+    file_list:
+      - path: app.h
+
+source:
+  - path: app.c
+
+configuration:
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 2752
+    condition: [sl_main]
+  - name: OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE
+    value: 0
+  - name: OPENTHREAD_CONFIG_LOG_OUTPUT
+    value: OPENTHREAD_CONFIG_LOG_OUTPUT_PLATFORM_DEFINED
+    condition: [ot_rtt_log]
+  - name: BUFFER_SIZE_UP
+    value: 768
+    condition: [ot_rtt_log]
+  - name: BUFFER_SIZE_DOWN
+    value: 0
+    condition: [ot_rtt_log]
+  - name: CIRCULAR_QUEUE_LEN_MAX
+    value: 16
+  - name: SL_OPENTHREAD_STACK_TASK_MEM_SIZE
+    value: 4608
+  - name: SL_STACK_SIZE
+    value: 0x800
+    condition: [kernel]
+
+tag:
+  - hardware:component:exp_header:spi
+  - hwfilter:device:device_supports_thread
+  - hwfilter:board:hardware_board_has_spi
+  - toolchain:gcc
+
+readme:
+  - path: ./README-OT-RCP.md
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread"]
+  - name: "Device Type"
+    value: ["RCP"]
+  - name: "Project Difficulty"
+    value: ["Advanced"]
+
+ui_hints:
+  highlight:
+    - path: ./README-OT-RCP.md
+      focus: true

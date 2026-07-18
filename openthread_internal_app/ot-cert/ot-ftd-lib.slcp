@@ -1,0 +1,84 @@
+project_name: ot-ftd-lib
+label: Certification Libraries - SoC (FTD)
+package: openthread
+description: >
+  This is a project to generate makefiles for producing the FTD certification libraries.
+category: OpenThread Library|Internal
+quality: internal
+
+component:
+  - id: ot_stack_ftd
+  - id: ot_stack_tcp_stubs
+  - id: clock_manager
+    condition: [device_series_3]
+  - id: toolchain_release
+
+config_file:
+  - path: "../../config/sl_openthread_features_ftd_cert_config.h"
+    override:
+      file_id: openthread_features
+      component: ot_stack_ftd
+
+configuration:
+  - name: SL_MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+    value: 1
+  - name: SL_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+    value: 1
+  # This stack size is dependent on LTO optimization. In the cases, where LTO merges more than 1 functions in a single one
+  # (includes inlining) causing the stack to increase. This project wide configuration, it is recommended to ensure this
+  # configuration is updated with appropriate values based on the additional components installed and application code added.
+  - name: SL_STACK_SIZE
+    value: 6144
+    condition: [toolchain_lto]
+    unless: [freertos]
+  - name: SL_STACK_SIZE
+    value: 4608
+    condition: [freertos]
+    unless: [toolchain_lto]
+  - name: SL_STACK_SIZE
+    value: 5120
+    condition: [toolchain_lto, freertos]
+  - name: SL_STACK_SIZE
+    value: 5120
+    unless: [toolchain_lto, freertos]
+  # Stack size config end
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 4608
+    condition: [sl_main,freertos]
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 5120
+    condition: [sl_main]
+    unless: [freertos]
+  - name: CIRCULAR_QUEUE_LEN_MAX
+    value: 16
+
+# Following adds the compiler and linker flags to create the GCC LTO enabled libs.
+# The application linking to these libs can use toolchain_gcc_lto component to
+# get the optimized build.
+toolchain_settings:
+  - option: gcc_compiler_option
+    value: -flto=auto
+  - option: gcc_compiler_option
+    value: -ffat-lto-objects
+  - option: gcc_compiler_option
+    value: -fno-inline-small-functions
+  - option: gcc_compiler_option
+    value: -fno-strict-aliasing
+
+tag:
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+
+define:
+  - name: OPENTHREAD_CONFIG_PLATFORM_BOOTLOADER_MODE_ENABLE
+    value: 1
+# Enable diag support in stack for certification libraries.
+# This does not include implementations for the diag functions.
+  - name: OPENTHREAD_CONFIG_DIAG_ENABLE
+    value: 1
+# Enable TCP support in stack for certification libraries.
+# This does not include implementations for the TCP functions.
+  - name: OPENTHREAD_CONFIG_TCP_ENABLE
+    value: 1
+  - name: OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE
+    value: 1

@@ -1,0 +1,74 @@
+project_name: ot-rcp-reference-device-11
+label: OpenThread - RCP (Thread 1.1 Reference Device)
+package: openthread
+description: >
+  This is a simple OpenThread RCP application that can be used with the OpenThread border router as Thread 1.1 reference device in the Thread test harness.
+category: OpenThread Certification Application|Internal
+quality: internal
+
+component:
+  - id: sl_main
+  - id: ot_stack_rcp
+  - id: ot_crash_handler
+  - id: iostream_recommended_console
+  - id: rail_util_pti
+  - id: clock_manager
+  - id: ot_reset_utils
+  # Platform - Enable LTO for gcc by installing the following component
+  - id: toolchain_gcc_lto
+
+include:
+  - path: ../ot-ncp/ot
+    file_list:
+      - path: app.h
+
+source:
+  - path: ../ot-ncp/ot/app.c
+
+configuration:
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 2752
+    condition: [sl_main]
+  - name: SL_BOARD_ENABLE_VCOM
+    value: 1
+  # By default, reference OTBR is configured to work with 460800 baud rate on UART
+  - name: SL_IOSTREAM_USART_VCOM_BAUDRATE
+    value: 460800
+    condition: [iostream_usart]
+  - name: SL_IOSTREAM_EUSART_VCOM_BAUDRATE
+    value: 460800
+    condition: [iostream_eusart]
+  - name: OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE
+    value: 0
+  - name: OPENTHREAD_CONFIG_THREAD_VERSION
+    value: OT_THREAD_VERSION_1_1
+  - name: CIRCULAR_QUEUE_LEN_MAX
+    value: 16
+  - name: SL_IOSTREAM_USART_VCOM_FLOW_CONTROL_TYPE
+    value: usartHwFlowControlCtsAndRts
+    condition: [iostream_usart]
+  - name: SL_IOSTREAM_EUSART_VCOM_FLOW_CONTROL_TYPE
+    value: SL_IOSTREAM_EUSART_UART_FLOW_CTRL_CTS_RTS
+    condition: [iostream_eusart]
+  - name: SL_OPENTHREAD_STACK_TASK_MEM_SIZE
+    value: 4608
+
+tag:
+  - prebuilt_demo
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+readme:
+  - path: ../ot-ncp/ot/README-OT-RCP.md
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread"]
+  - name: "Device Type"
+    value: ["RCP"]
+  - name: "Project Difficulty"
+    value: ["Advanced"]
+
+ui_hints:
+  highlight:
+    - path: ../ot-ncp/ot/README-OT-RCP.md
+      focus: true

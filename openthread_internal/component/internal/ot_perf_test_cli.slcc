@@ -1,0 +1,44 @@
+id: ot_perf_test_cli
+label: OT Internal Performance Testing CLI
+package: openthread
+category: OpenThread|Internal
+quality: internal
+description: This component provides CLI commands for internal performance testing.
+provides:
+- name: ot_perf_test_cli
+requires:
+- name: ot_test_custom_cli_config
+- name: ot_debug_channel
+  condition: [ot_cli]
+- name: sl_ot_custom_cli
+  condition: [ot_cli]
+include:
+- path: include/util
+  unless: [ot_ncp]
+- path: src/cli/
+  unless: [ot_ncp]
+  file_list:
+  - path: perf_test_cli.hpp
+source:
+- path: src/cli/perf_test_cli.cpp
+  unless: [ot_rcp]
+template_contribution:
+- name: ot_init
+  value: sl_ot_perf_test_cli_init
+  priority: 30
+  condition: [sl_ot_custom_cli]
+- name: sl_ot_cli_command
+  value:
+    name: "perf"
+    handler: "PerfTestCommand"
+    macro: "SL_OPENTHREAD_PERF_TEST_CLI_ENABLE"
+  condition: [sl_ot_custom_cli]
+define:
+- name: SL_OPENTHREAD_PERF_TEST_CLI_ENABLE
+  value: 1
+- name: OPENTHREAD_CONFIG_COAP_API_ENABLE
+  value: 1
+metadata:
+  sbom:
+    license: MSLA
+root_path: openthread_internal

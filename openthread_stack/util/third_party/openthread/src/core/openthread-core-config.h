@@ -108,8 +108,10 @@
 #include "config/srp_client.h"
 #include "config/srp_server.h"
 #include "config/time_sync.h"
+#include "config/timeSyncService.h"
 #include "config/tmf.h"
 #include "config/trel.h"
+#include "config/prioritized_routing_config.h"
 #include "config/wakeup.h"
 
 #undef OPENTHREAD_CORE_CONFIG_H_IN

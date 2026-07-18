@@ -1,0 +1,27 @@
+id: ot_trigger_fault
+label: OT Internal Trigger Fault Component
+package: openthread
+category: OpenThread|Internal
+quality: internal
+description: |-
+  This component will intentionally trigger a fault after a configurable delay.
+  It is mainly intended as a convenient way to test ot_crash_handler
+provides:
+- name: ot_trigger_fault
+requires:
+- name: rail_lib
+config_file:
+- path: config/sl_openthread_trigger_fault_config.h
+toolchain_settings:
+- option: preinclude
+  value: sl_openthread_trigger_fault_config.h
+template_contribution:
+- name: ot_init
+  value: sl_ot_trigger_fault_init
+  priority: 10000
+source:
+- path: src/util/trigger_fault.c
+metadata:
+  sbom:
+    license: Zlib
+root_path: openthread_internal

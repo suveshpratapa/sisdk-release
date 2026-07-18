@@ -88,8 +88,10 @@ set(COMMON_SOURCES
     api/tcp_ext_api.cpp
     api/thread_api.cpp
     api/thread_ftd_api.cpp
+    api/prioritized_routing_api.cpp
     api/trel_api.cpp
     api/udp_api.cpp
+    api/timeSyncService_api.cpp
     api/verhoeff_checksum_api.cpp
     backbone_router/backbone_tmf.cpp
     backbone_router/bbr_leader.cpp
@@ -242,6 +244,9 @@ set(COMMON_SOURCES
     thread/message_framer.cpp
     thread/mle.cpp
     thread/mle_ftd.cpp
+    thread/mle_prioritized_routing_extensions.cpp
+    thread/mle_prioritized_route_table.cpp
+    thread/mle_prioritized_router.cpp
     thread/mle_p2p.cpp
     thread/mle_tlvs.cpp
     thread/mle_types.cpp
@@ -257,6 +262,8 @@ set(COMMON_SOURCES
     thread/network_data_service.cpp
     thread/network_data_tlvs.cpp
     thread/network_data_types.cpp
+    thread/enhanced_prioritized_route_tlv_entry.cpp
+    thread/network_diagnostic_prioritized_route.cpp
     thread/network_diagnostic.cpp
     thread/network_diagnostic_tlvs.cpp
     thread/panid_query_server.cpp
@@ -265,10 +272,12 @@ set(COMMON_SOURCES
     thread/radio_selector.cpp
     thread/router.cpp
     thread/router_table.cpp
+    thread/prioritized_router.cpp
     thread/src_match_controller.cpp
     thread/thread_link_info.cpp
     thread/thread_netif.cpp
     thread/time_sync_service.cpp
+    thread/TimeSyncService.cpp
     thread/tmf.cpp
     thread/uri_paths.cpp
     thread/version.cpp
@@ -323,6 +332,7 @@ set(RADIO_COMMON_SOURCES
     radio/radio_callbacks.cpp
     radio/radio_platform.cpp
     thread/link_quality.cpp
+    thread/TimeSyncService.cpp
     utils/otns.cpp
     utils/parse_cmdline.cpp
     utils/power_calibration.cpp

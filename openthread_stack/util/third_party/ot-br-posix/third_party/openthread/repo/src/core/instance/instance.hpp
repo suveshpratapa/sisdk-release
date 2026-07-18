@@ -68,7 +68,9 @@
 #include "utils/otns.hpp"
 #include "utils/power_calibration.hpp"
 #include "utils/static_counter.hpp"
-
+#if FEATURE_TIMESYNCSERVICE_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+#include "thread/TimeSyncService.hpp"
+#endif
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
 #include "backbone_router/backbone_tmf.hpp"
 #include "backbone_router/bbr_leader.hpp"
@@ -748,6 +750,10 @@ private:
     Extension::ExtensionBase &mExtension;
 #endif
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+    TimeSyncService::TimeSyncService mTimeSyncService;
+#endif
+
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     FactoryDiags::Diags mDiags;
 #endif
@@ -1168,6 +1174,10 @@ template <> inline TimerMicro::Scheduler &Instance::Get(void) { return mTimerMic
 
 #if OPENTHREAD_ENABLE_VENDOR_EXTENSION
 template <> inline Extension::ExtensionBase &Instance::Get(void) { return mExtension; }
+#endif
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+template <> inline TimeSyncService::TimeSyncService  &Instance::Get(void) { return mTimeSyncService; }
 #endif
 
 #if OPENTHREAD_CONFIG_DIAG_ENABLE

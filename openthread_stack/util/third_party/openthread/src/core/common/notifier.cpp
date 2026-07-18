@@ -161,6 +161,9 @@ void Notifier::EmitEvents(void)
 #if OPENTHREAD_ENABLE_VENDOR_EXTENSION
     Get<Extension::ExtensionBase>().HandleNotifierEvents(events);
 #endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    Get<TimeSyncService::TimeSyncService>().HandleNotifierEvents(events);
+#endif
 #if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
     Get<BorderRouter::RxRaTracker>().HandleNotifierEvents(events);
     Get<BorderRouter::RoutingManager>().HandleNotifierEvents(events);

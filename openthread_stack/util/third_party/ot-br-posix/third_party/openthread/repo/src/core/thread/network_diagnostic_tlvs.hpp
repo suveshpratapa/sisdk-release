@@ -103,6 +103,10 @@ public:
         kBrDhcp6PdOmrPrefix    = OT_NETWORK_DIAGNOSTIC_TLV_BR_DHCP6_PD_OMR_PREFIX,
         kBrLocalOnlinkPrefix   = OT_NETWORK_DIAGNOSTIC_TLV_BR_LOCAL_OL_PREFIX,
         kBrFavoredOnLinkPrefix = OT_NETWORK_DIAGNOSTIC_TLV_BR_FAVORED_OL_PREFIX,
+    #if PRIORITIZED_ROUTING_ENABLE
+        kEnhancedPrioritizedRoute   = OT_NETWORK_DIAGNOSTIC_TLV_ENHANCED_PRIORITIZED_ROUTE,
+    #endif
+
     };
 
     /**

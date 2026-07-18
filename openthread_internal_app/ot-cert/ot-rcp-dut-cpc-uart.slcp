@@ -1,0 +1,84 @@
+project_name: ot-rcp-dut-cpc-uart
+label: Multiprotocol (OpenThread+Zigbee) - RCP DUT (CPC UART)
+package: openthread
+description: >
+  This is the rcp-uart-802154 app built with default settings and can be used in combination with the OpenThread Border Router (OTBR) as the Device Under Test (DUT) in the Thread test harness.
+category: OpenThread Certification Application|Internal
+quality: internal
+
+component:
+  - id: sl_main
+  - id: ot_stack_rcp
+  - id: ot_crash_handler
+  - id: ot_ncp_cpc
+  - id: cpc_secondary_driver_uart_usart
+    instance: [vcom]
+    condition: [device_series_2]
+  - id: cpc_secondary_driver_uart_eusart
+    instance: [vcom]
+    condition: [device_series_3]
+  - id: rail_util_pti
+  - id: bootloader_interface
+  - id: clock_manager
+  - id: ot_reset_utils
+  # Platform - Enable LTO for gcc by installing the following component
+  - id: toolchain_gcc_lto
+
+include:
+  - path: ../ot-ncp/cpc
+    file_list:
+      - path: app.h
+
+source:
+  - path: ../ot-ncp/cpc/app.c
+
+configuration:
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 2752
+    condition: [sl_main]
+  - name: SL_STACK_SIZE
+    value: 2752
+  - name: SL_BOARD_ENABLE_VCOM
+    value: 1
+  - name: SL_CPC_DRV_UART_VCOM_BAUDRATE
+    value: 460800
+  - name: SL_CPC_DRV_UART_VCOM_FLOW_CONTROL_TYPE
+    value: usartHwFlowControlCtsAndRts
+    condition: [cpc_secondary_driver_uart_usart]
+  - name: SL_CPC_DRV_UART_VCOM_FLOW_CONTROL_TYPE
+    value: eusartHwFlowControlCtsAndRts
+    condition: [cpc_secondary_driver_uart_eusart]
+  - name: OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE
+    value: 0
+  - name: OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
+    value: 1
+  - name: OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
+    value: 1
+  - name: OPENTHREAD_CONFIG_MULTIPLE_STATIC_INSTANCE_ENABLE
+    value: 1
+  - name: CIRCULAR_QUEUE_LEN_MAX
+    value: 16
+  - name: SL_OPENTHREAD_STACK_TASK_MEM_SIZE
+    value: 4608
+
+tag:
+  - prebuilt_demo
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+readme:
+  - path: ../ot-ncp/cpc/README-MP-RCP.md
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread", "Zigbee"]
+  - name: "Device Type"
+    value: ["RCP"]
+  - name: "Capability"
+    value: ["Multiprotocol"]
+  - name: "Project Difficulty"
+    value: ["Advanced"]
+
+ui_hints:
+  highlight:
+    - path: ../ot-ncp/cpc/README-MP-RCP.md
+      focus: true

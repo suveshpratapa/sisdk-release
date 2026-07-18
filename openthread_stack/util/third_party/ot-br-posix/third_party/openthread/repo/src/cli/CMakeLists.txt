@@ -54,6 +54,8 @@ set(COMMON_SOURCES
     cli_tcp.cpp
     cli_udp.cpp
     cli_utils.cpp
+    cli_timeSyncService.cpp
+    cli_prioritized_routing.cpp
 )
 
 set(OT_CLI_VENDOR_EXTENSION "" CACHE STRING "Path to CMake file to define and link cli vendor extension")

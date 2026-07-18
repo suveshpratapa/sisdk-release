@@ -81,6 +81,15 @@ otPanId efr32GetDstPanId(otRadioFrame *aFrame);
 uint8_t *efr32GetPayload(otRadioFrame *aFrame);
 
 /**
+ * This function returns the length of the payload.
+ *
+ * @param[in]  aFrame       A pointer to the MAC frame buffer.
+ *
+ * @retval  Length of the payload.
+ */
+uint16_t efr32GetPayloadLength(otRadioFrame *aFrame);
+
+/**
  * This function checks if the PAN ID Compression bit is set in the given MAC frame.
  *
  * @param[in]  aFrame       A pointer to the MAC frame buffer.

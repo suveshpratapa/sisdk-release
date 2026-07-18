@@ -72,6 +72,10 @@ openthread_cli_sources = [
   "cli_utils.cpp",
   "cli_utils.hpp",
   "x509_cert_key.hpp",
+  "cli_timeSyncService.cpp",
+  "cli_timeSyncService.hpp",
+  "cli_prioritized_routing.cpp",
+  "cli_prioritized_routing.hpp",
 ]
 
 config("cli_config") {

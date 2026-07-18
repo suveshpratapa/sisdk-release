@@ -42,6 +42,7 @@
 #include <openthread/dataset.h>
 #include <openthread/error.h>
 #include <openthread/instance.h>
+
 #include <openthread/ip6.h>
 #include <openthread/message.h>
 #include <openthread/thread.h>
@@ -95,11 +96,14 @@ extern "C" {
 #define OT_NETWORK_DIAGNOSTIC_TLV_BR_LOCAL_OL_PREFIX 42     ///< Border Router Local On-link Prefix TLV
 #define OT_NETWORK_DIAGNOSTIC_TLV_BR_FAVORED_OL_PREFIX 43   ///< Border Router Favored On-link Prefix TLV
 
+#define OT_NETWORK_DIAGNOSTIC_TLV_ENHANCED_PRIORITIZED_ROUTE 102 ///< Enhanced Prioritized Route TLV
+
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_NAME_TLV_LENGTH 32          ///< Max length of Vendor Name TLV.
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_MODEL_TLV_LENGTH 32         ///< Max length of Vendor Model TLV.
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_SW_VERSION_TLV_LENGTH 16    ///< Max length of Vendor SW Version TLV.
 #define OT_NETWORK_DIAGNOSTIC_MAX_THREAD_STACK_VERSION_TLV_LENGTH 64 ///< Max length of Thread Stack Version TLV.
 #define OT_NETWORK_DIAGNOSTIC_MAX_VENDOR_APP_URL_TLV_LENGTH 96       ///< Max length of Vendor App URL TLV.
+#define OT_NETWORK_DIAGNOSTIC_MAX_IP6_ADDR_LIST_LENGTH 15 ///< Max number of IPv6 addresses in IP6 Address List TLV.
 
 #define OT_NETWORK_DIAGNOSTIC_ITERATOR_INIT 0 ///<  Initializer for `otNetworkDiagIterator`.
 

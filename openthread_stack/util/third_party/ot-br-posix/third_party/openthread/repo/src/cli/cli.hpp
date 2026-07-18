@@ -84,6 +84,13 @@
 #include "common/debug.hpp"
 #include "common/type_traits.hpp"
 #include "instance/instance.hpp"
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+#include "cli/cli_timeSyncService.hpp"
+#endif
+
+#if PRIORITIZED_ROUTING_ENABLE
+#include "cli/cli_prioritized_routing.hpp"
+#endif
 
 namespace ot {
 
@@ -423,10 +430,17 @@ private:
 #if OPENTHREAD_CONFIG_MESH_DIAG_ENABLE && OPENTHREAD_FTD
     MeshDiag mMeshDiag;
 #endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    TimeSyncService mTimeSyncService;
+#endif
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
 
 #if OPENTHREAD_CONFIG_TMF_ANYCAST_LOCATOR_ENABLE
     bool mLocateInProgress : 1;
+#endif
+
+#if PRIORITIZED_ROUTING_ENABLE
+    PrioritizedRouting mPrioritizedRouting;
 #endif
 };
 

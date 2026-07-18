@@ -796,6 +796,10 @@ Message *Message::Clone(uint16_t aLength) const
     messageCopy->SetTimeSync(IsTimeSync());
 #endif
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    messageCopy->SetTxTimestampEnabled(IsTxTimestampEnabled());
+#endif
+
 exit:
     FreeAndNullMessageOnError(messageCopy, error);
     return messageCopy;
@@ -825,6 +829,10 @@ Error Message::GetLinkInfo(ThreadLinkInfo &aLinkInfo) const
     aLinkInfo.mRadioType = GetRadioType();
 #endif
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+aLinkInfo.mRadioTime = GetRadioTime();
+#endif
+
 exit:
     return error;
 }
@@ -845,6 +853,10 @@ void Message::UpdateLinkInfoFrom(const ThreadLinkInfo &aLinkInfo)
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     SetRadioType(static_cast<Mac::RadioType>(aLinkInfo.mRadioType));
+#endif
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    SetRadioTime(aLinkInfo.mRadioTime);
 #endif
 }
 

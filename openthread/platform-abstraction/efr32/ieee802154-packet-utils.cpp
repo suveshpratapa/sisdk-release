@@ -398,6 +398,11 @@ uint8_t *efr32GetPayload(otRadioFrame *aFrame)
     return payload;
 }
 
+uint16_t efr32GetPayloadLength(otRadioFrame *aFrame)
+{
+    return static_cast<Mac::RxFrame *>(aFrame)->GetPayloadLength();
+}
+
 bool efr32FrameIsPanIdCompressed(otRadioFrame *aFrame)
 {
     return static_cast<Mac::RxFrame *>(aFrame)->IsPanIdCompressed();

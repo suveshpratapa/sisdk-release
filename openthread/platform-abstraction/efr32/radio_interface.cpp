@@ -604,6 +604,15 @@ uint32_t sli_ot_radio_interface_rail_get_rx_to_tx_timing(void)
     return sRailIeee802154Config.timings.rx_to_tx;
 }
 
+uint32_t sli_ot_radio_interface_rail_get_tx_preamble_duration(void)
+{
+    sl_rail_tx_packet_details_t packetDetails;
+    packetDetails.time_sent.total_packet_bytes = SL_RAIL_TX_STARTED_BYTES,
+
+    (void)sl_rail_get_tx_time_preamble_start(gRailHandle, &packetDetails);
+    return packetDetails.time_sent.packet_time;
+}
+
 // RAIL configuration
 sl_rail_status_t sli_ot_radio_interface_rail_config_channels(
     const sl_rail_channel_config_t         *aChannels,

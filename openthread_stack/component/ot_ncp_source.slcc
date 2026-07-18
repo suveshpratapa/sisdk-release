@@ -50,7 +50,6 @@ source:
 - path: ncp/ncp_spi.cpp
 - path: ncp/platform/dnssd.cpp
 - path: ncp/platform/infra_if.cpp
-- path: ncp/platform/trel.cpp
 - path: lib/hdlc/hdlc.cpp
 
 define:

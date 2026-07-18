@@ -1,0 +1,123 @@
+id: ot_simulation
+label: Simulation
+package: openthread
+category: OpenThread
+quality: internal
+description: This component provides support for openhtread simulation as defined https://openthread.io/platforms/simulation and https://github.com/openthread/openthread/blob/main/examples/platforms/simulation/README.md.
+provides:
+- name: ot_simulation
+- name: ot_platform_abstraction
+  condition: [ot_simulation]
+- name: ot_platform_abstraction_core
+  condition: [ot_simulation]
+- name: ot_platform_abstraction_implementation
+  condition: [ot_simulation]
+- name: psa_its
+  condition: [ot_simulation]
+- name: mbedtls_entropy_source
+  condition: [ot_simulation]
+- name: segger_rtt
+  condition: [ot_simulation]
+- name: ot_debug_channel
+  condition: [ot_simulation]
+- name: rail_util_ant_div
+  condition: [ot_simulation]
+- name: rail_util_coex
+  condition: [ot_simulation]
+- name: rail_util_ieee802154_stack_event
+  condition: [ot_simulation]
+- name: sl_rail_util_ieee802154_phy_select
+  condition: [ot_simulation]
+- name: se_manager
+  condition: [ot_simulation]
+requires:
+- name: ot_platform_simulation
+- name: sl_system
+- name: component_catalog
+- name: psa_driver
+- name: ot_sbom_openthread
+- name: ot_sbom_tcplp
+include:
+- path: platform/Device/SiliconLabs/simulation/Include
+  file_list:
+  - path: em_device.h
+  - path: simulation_event_sc12.h
+  - path: simulation_gpio_p.h
+  - path: simulation_gpio.h
+  - path: simulation_sc.h
+- path: platform-abstraction/efr32
+  file_list:
+  - path: soft_source_match_table.h
+- path: platform-abstraction/simulation
+  file_list:
+  - path: openthread-core-efr32-simulation-config.h
+  - path: rail_util_simulation.h
+- path: platform-abstraction/include
+  file_list:
+  - path: radio_extension.h
+- path: platform/common/inc
+  file_list:
+  - path: sl_status.h
+source:
+- path: platform-abstraction/efr32/radio_extension.c
+- path: platform-abstraction/efr32/soft_source_match_table.c
+- path: platform-abstraction/simulation/rail_util_simulation.c
+define:
+- name: SL_OPENTHREAD_STACK_FEATURES_CONFIG_FILE
+  value: "\"sl_openthread_features_config.h\""
+- name: OPENTHREAD_PROJECT_CORE_CONFIG_FILE
+  value: "\"openthread-core-efr32-simulation-config.h\""
+- name: OPENTHREAD_EXAMPLES_SIMULATION
+  value: 1
+- name: NO_CRYPTO_ACCELERATION
+- name: OPENTHREAD_CONFIG_TCP_ENABLE
+  value: 1
+template_file:
+- path: src/template/sl_ot_init.c.jinja
+- path: include/template/sl_ot_init.h.jinja
+template_contribution:
+- name: event_handler
+  value:
+    event: internal_app_init
+    include: sl_ot_init.h
+    handler: sl_ot_init
+- name: ot_init
+  value: sl_ot_create_instance
+  priority: 0
+- name: component_catalog
+  value: ot_simulation
+- name: component_catalog
+  value: rail_util_ant_div
+  condition: [ot_ant_div]
+- name: component_catalog
+  value: rail_util_coex
+  condition: [ot_coex]
+- name: component_catalog
+  value: rail_util_ieee802154_stack_event
+  condition: [ot_ant_div]
+- name: component_catalog
+  value: sl_rail_util_ieee802154_phy_select
+  condition: [ot_ant_div]
+- name: component_catalog
+  value: rail_util_ieee802154_stack_event
+  condition: [ot_coex]
+- name: component_catalog
+  value: sl_rail_util_ieee802154_phy_select
+  condition: [ot_coex]
+
+toolchain_settings:
+- option: optimize
+  value: "none"
+- option: gcc_compiler_option
+  value: "-g"
+- option: llvm_compiler_option
+  value: "-g"
+
+metadata:
+  sbom:
+    # BSD-3-Clause covers the files from util/third_party/openthread
+    # and platform-abstraction/efr32.
+    # Zlib covers the other files from .
+    # MSLA covers the files from platform
+    license: BSD-3-Clause AND Zlib AND MSLA
+root_path: openthread_internal

@@ -1,0 +1,24 @@
+id: ot_memory_usage
+label: Memory Usage
+package: openthread
+category: OpenThread|Utility
+quality: internal
+description: Provides memory usage functionality for OpenThread applications, including APIs for accessing flash and RAM metrics.
+provides:
+- name: ot_memory_usage
+requires:
+- name: memory_usage_api
+- name: ot_memory_usage_cli
+  condition: [ot_cli]
+- name: ot_ncp_vendor_extension
+  condition: [ot_rcp]
+source:
+- path: platform-abstraction/ncp/ncp_memory_usage.cpp
+  condition: [ot_rcp]
+template_contribution:
+- name: component_catalog
+  value: openthread_memory_usage
+metadata:
+  sbom:
+    license: MSLA
+root_path: openthread_internal

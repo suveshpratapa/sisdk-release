@@ -132,6 +132,7 @@ source_set("openthread") {
     "trel.h",
     "udp.h",
     "verhoeff_checksum.h",
+    "timeSyncService.h",
   ]
 
   public_deps = [ ":openthread_config" ]

@@ -28,6 +28,10 @@
 
 #include "router_table.hpp"
 
+#if PRIORITIZED_ROUTING_ENABLE
+#include "thread/prioritized_routing_defs.hpp"
+#endif
+
 #if OPENTHREAD_FTD
 
 #include "instance/instance.hpp"
@@ -45,6 +49,10 @@ RouterTable::RouterTable(Instance &aInstance)
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
     , mMinRouterId(0)
     , mMaxRouterId(Mle::kMaxRouterId)
+#endif
+#if PRIORITIZED_ROUTING_ENABLE
+    , mIsPrioritizedRoutingEnabled(true)
+    , mPrioritizedRouteCostThreshold(PrioritizedRouting::kMaxPrioritizedRouteCostThreshold)
 #endif
 {
     Clear();
@@ -494,8 +502,27 @@ uint16_t RouterTable::GetNextHop(uint16_t aDestRloc16) const
 {
     uint8_t  pathCost;
     uint16_t nextHopRloc16;
-
+    
+#if PRIORITIZED_ROUTING_ENABLE
+    
+    pathCost        = Mle::kMaxRouteCost;
+    nextHopRloc16   = Mle::kInvalidRloc16;
+    GetPrioritizedNextHopAndPathCost(aDestRloc16, nextHopRloc16, pathCost);
+    
+    if ((Mle::kInvalidRloc16 == nextHopRloc16) || (Mle::kMaxRouteCost == pathCost))
+    {
+        const Router *router = FindRouterByRloc16(aDestRloc16);
+        if (router && IsPrioritizedRouter(*router))
+        {
+            LogWarn("GetNextHop: Couldn't find a valid vendor next hop to rloc16: 0x%x", aDestRloc16);
+        }
+        pathCost      = Mle::kMaxRouteCost;
+        nextHopRloc16 = Mle::kInvalidRloc16;
+        GetNextHopAndPathCost(aDestRloc16, nextHopRloc16, pathCost);
+    }
+#else
     GetNextHopAndPathCost(aDestRloc16, nextHopRloc16, pathCost);
+#endif //PRIORITIZED_ROUTING_ENABLE
 
     return nextHopRloc16;
 }
@@ -884,7 +911,11 @@ void RouterTable::HandleTableChanged(void)
 {
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
     LogRouteTable();
+#if PRIORITIZED_ROUTING_ENABLE
+    LogPrioritizedRouteTable();
 #endif
+#endif
+
 
 #if OPENTHREAD_CONFIG_HISTORY_TRACKER_ENABLE
     Get<HistoryTracker::Local>().RecordRouterTableChange();

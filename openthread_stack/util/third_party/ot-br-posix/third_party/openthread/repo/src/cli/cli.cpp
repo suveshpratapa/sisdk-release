@@ -137,8 +137,14 @@ Interpreter::Interpreter(Instance *aInstance, otCliOutputCallback aCallback, voi
 #if OPENTHREAD_CONFIG_MESH_DIAG_ENABLE && OPENTHREAD_FTD
     , mMeshDiag(aInstance, *this)
 #endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    , mTimeSyncService(aInstance, *this)
+#endif
 #if OPENTHREAD_CONFIG_TMF_ANYCAST_LOCATOR_ENABLE
     , mLocateInProgress(false)
+#endif
+#if PRIORITIZED_ROUTING_ENABLE
+    , mPrioritizedRouting(aInstance, *this)
 #endif
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
 {
@@ -7121,7 +7127,15 @@ template <> otError Interpreter::Process<Cmd("tcat")>(Arg aArgs[]) { return mTca
 template <> otError Interpreter::Process<Cmd("tcp")>(Arg aArgs[]) { return mTcp.Process(aArgs); }
 #endif
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+template <> otError Interpreter::Process<Cmd("timesyncservice")>(Arg aArgs[]) { return mTimeSyncService.Process(aArgs); }
+#endif
+
 template <> otError Interpreter::Process<Cmd("udp")>(Arg aArgs[]) { return mUdp.Process(aArgs); }
+
+#if PRIORITIZED_ROUTING_ENABLE
+template <> otError Interpreter::Process<Cmd("prioritizedrouting")>(Arg aArgs[]) { return mPrioritizedRouting.Process(aArgs); }
+#endif
 
 template <> otError Interpreter::Process<Cmd("unsecureport")>(Arg aArgs[])
 {
@@ -8776,6 +8790,9 @@ otError Interpreter::ProcessCommand(Arg aArgs[])
 #if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
         CmdEntry("prefix"),
 #endif
+#if PRIORITIZED_ROUTING_ENABLE
+        CmdEntry("prioritizedrouting"),
+#endif
         CmdEntry("promiscuous"),
 #if OPENTHREAD_FTD
         CmdEntry("pskc"),
@@ -8837,6 +8854,11 @@ otError Interpreter::ProcessCommand(Arg aArgs[])
 #if OPENTHREAD_CONFIG_TX_QUEUE_STATISTICS_ENABLE
         CmdEntry("timeinqueue"),
 #endif
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+        CmdEntry("timesyncservice"),
+#endif
+
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
         CmdEntry("trel"),
 #endif

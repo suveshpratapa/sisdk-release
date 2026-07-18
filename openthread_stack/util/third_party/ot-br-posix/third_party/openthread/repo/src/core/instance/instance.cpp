@@ -294,6 +294,9 @@ Instance::Instance(void)
 #if OPENTHREAD_ENABLE_VENDOR_EXTENSION
     , mExtension(Extension::ExtensionBase::Init(*this))
 #endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+    , mTimeSyncService(*this)
+#endif
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     , mDiags(*this)
 #endif

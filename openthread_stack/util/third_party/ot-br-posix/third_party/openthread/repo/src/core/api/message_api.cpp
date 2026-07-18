@@ -122,6 +122,14 @@ int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint
     return aLength;
 }
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+void otMessageEnableTxTimestamp(otMessage *aMessage) { AsCoreType(aMessage).SetTxTimestampEnabled(true); }
+
+uint64_t otMessageGetRadioTime(const otMessage *aMessage) {return AsCoreType(aMessage).GetRadioTime(); }
+
+void otMessageSetRadioTime(otMessage *aMessage, uint64_t aRadioTime) {AsCoreType(aMessage).SetRadioTime(aRadioTime); }
+#endif
+
 void otMessageQueueInit(otMessageQueue *aQueue) { AsCoreType(aQueue).Clear(); }
 
 void otMessageQueueEnqueue(otMessageQueue *aQueue, otMessage *aMessage)

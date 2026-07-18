@@ -1,0 +1,77 @@
+project_name: ot-cli-mtd-simulation
+label: OpenThread - SoC CLI MTD (simulation)
+package: openthread
+description: >
+  This is the ot-cli-mtd app built for simulation.
+category: OpenThread Examples
+quality: internal
+
+component:
+  - id: ot_stack_mtd
+  - id: ot_cli_source
+  - id: native
+  - id: ot_simulation
+  - id: sl_ot_custom_cli
+  - id: ot_reset_utils
+
+include:
+  - path: .
+    file_list:
+    - path: app.h
+
+source:
+  - path: main.c
+    unless:
+      - sl_main
+  - path: app.c
+
+configuration:
+  - name: SL_MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+    value: 1
+  - name: SL_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+    value: 1
+  - name: SL_STACK_SIZE
+    value: 5120
+    unless: [freertos]
+  - name: SL_STACK_SIZE
+    value: 4608
+    condition: [freertos]
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 4608
+    condition: [sl_main,freertos]
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 5120
+    condition: [sl_main]
+    unless: [freertos]
+    
+readme:
+  - path: ../ot-cli/README.md
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread"]
+  - name: "Device Type"
+    value: ["SoC"]
+  - name: "Project Difficulty"
+    value: ["Beginner"]
+
+ui_hints:
+  highlight:
+    - path: ../ot-cli/README.md
+      focus: true
+
+tag:
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+
+template_contribution:
+  - name: sl_ot_cli_command
+    value:
+      name: "exit"
+      handler: "ProcessExit"
+      macro: "OPENTHREAD_EXAMPLES_SIMULATION"
+  - name: sl_ot_cli_command
+    value:
+      name: "nodeidfilter"
+      handler: "ProcessNodeIdFilter"
+      macro: "OPENTHREAD_EXAMPLES_SIMULATION"

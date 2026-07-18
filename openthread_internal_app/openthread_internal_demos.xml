@@ -1,0 +1,303 @@
+<?xml version="1.0" ?>
+<demos>
+	<demo name="brd4186c.demo.ot-ftd-dut-coap-lib" label="OpenThread - SoC FTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-coap-lib/ot-ftd-dut-coap-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the coap certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4116a.demo.ot-ftd-dut-coap-lib" label="OpenThread - SoC FTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg26b410f3200im48.*"/>
+		<property key="boardCompatibility" value="brd4116a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-coap-lib/ot-ftd-dut-coap-lib-brd4116a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the coap certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-ftd-dut-coap-lib" label="OpenThread - SoC FTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-coap-lib/ot-ftd-dut-coap-lib-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the coap certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-ftd-dut-lib" label="OpenThread - SoC FTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-lib/ot-ftd-dut-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4116a.demo.ot-ftd-dut-lib" label="OpenThread - SoC FTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg26b410f3200im48.*"/>
+		<property key="boardCompatibility" value="brd4116a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-lib/ot-ftd-dut-lib-brd4116a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-ftd-dut-lib" label="OpenThread - SoC FTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-lib/ot-ftd-dut-lib-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-ftd-dut-mi-coap-lib" label="OpenThread - SoC FTD DUT (using multi-instance coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using multi-instance coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-mi-coap-lib/ot-ftd-dut-mi-coap-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the multi-instance coap certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-ftd-dut-multicast-coap-lib" label="OpenThread - SoC FTD DUT (using multicast coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (using multicast coap certification libs)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-multicast-coap-lib/ot-ftd-dut-multicast-coap-lib-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built using the FTD certification config and linked against the multicast coap certification library. It can operate in a Full Thread device (FTD) role and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-ftd-dut-source" label="OpenThread - SoC FTD DUT (built from source)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (built from source)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-source/ot-ftd-dut-source-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built from source using the FTD certification config. It can operate in either a Full or Minimal Thread device (FTD or MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. It also enables multi-instance support. </description>
+	</demo>
+	<demo name="brd4116a.demo.ot-ftd-dut-source" label="OpenThread - SoC FTD DUT (built from source)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (built from source)"/>
+		<property key="partCompatibility" value=".*efr32mg26b410f3200im48.*"/>
+		<property key="boardCompatibility" value="brd4116a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-source/ot-ftd-dut-source-brd4116a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built from source using the FTD certification config. It can operate in either a Full or Minimal Thread device (FTD or MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. It also enables multi-instance support. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-ftd-dut-source" label="OpenThread - SoC FTD DUT (built from source)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (built from source)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-source/ot-ftd-dut-source-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built from source using the FTD certification config. It can operate in either a Full or Minimal Thread device (FTD or MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. It also enables multi-instance support. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-ftd-dut-source" label="OpenThread - SoC FTD DUT (built from source)">
+		<property key="blurb" value="OpenThread - SoC FTD DUT (built from source)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-ftd-dut-source/ot-ftd-dut-source-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-ftd app built from source using the FTD certification config. It can operate in either a Full or Minimal Thread device (FTD or MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. It also enables multi-instance support. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-mtd-dut-coap-lib" label="OpenThread - SoC MTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-coap-lib/ot-mtd-dut-coap-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the coap certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4116a.demo.ot-mtd-dut-coap-lib" label="OpenThread - SoC MTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg26b410f3200im48.*"/>
+		<property key="boardCompatibility" value="brd4116a"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-coap-lib/ot-mtd-dut-coap-lib-brd4116a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the coap certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-mtd-dut-coap-lib" label="OpenThread - SoC MTD DUT (using coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using coap certification libs)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-coap-lib/ot-mtd-dut-coap-lib-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the coap certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-mtd-dut-lib" label="OpenThread - SoC MTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-lib/ot-mtd-dut-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4116a.demo.ot-mtd-dut-lib" label="OpenThread - SoC MTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg26b410f3200im48.*"/>
+		<property key="boardCompatibility" value="brd4116a"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-lib/ot-mtd-dut-lib-brd4116a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-mtd-dut-lib" label="OpenThread - SoC MTD DUT (using certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using certification libs)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-lib/ot-mtd-dut-lib-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-mtd-dut-multicast-coap-lib" label="OpenThread - SoC MTD DUT (using multicast coap certification libs)">
+		<property key="blurb" value="OpenThread - SoC MTD DUT (using multicast coap certification libs)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-mtd-dut-multicast-coap-lib/ot-mtd-dut-multicast-coap-lib-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-cli-mtd app built using the MTD certification config and linked against the multicast coap certification library. It can operate in a Minimal Thread device (MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4181c.demo.ot-ncp-ftd-dut-cpc-uart" label="OpenThread - NCP FTD DUT (CPC UART)">
+		<property key="blurb" value="OpenThread - NCP FTD DUT (CPC UART)"/>
+		<property key="partCompatibility" value=".*efr32mg21b010f1024im32.*"/>
+		<property key="boardCompatibility" value="brd4181c"/>
+		<property key="imageFile" value="demos/ot-ncp-ftd-dut-cpc-uart/ot-ncp-ftd-dut-cpc-uart-brd4181c.s37"/>
+		<property key="readmeFiles" value="ot-ncp/cpc/README-OT-NCP.md"/>
+		<property key="filters" value="Device\ Type|NCP Project\ Difficulty|Advanced Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the ot-ncp-ftd-cpc app built from source using the NCP FTD certification config. It can operate in either a Full or Minimal Thread device (FTD or MTD) role including Synchronized Sleepy End Device (SSED) and can be used as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4186c.demo.ot-rcp-dut-cpc-uart" label="Multiprotocol (OpenThread+Zigbee) - RCP DUT (CPC UART)">
+		<property key="blurb" value="Multiprotocol (OpenThread+Zigbee) - RCP DUT (CPC UART)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd4186c"/>
+		<property key="imageFile" value="demos/ot-rcp-dut-cpc-uart/ot-rcp-dut-cpc-uart-brd4186c.s37"/>
+		<property key="readmeFiles" value="ot-ncp/cpc/README-MP-RCP.md"/>
+		<property key="filters" value="Capability|Multiprotocol Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread Wireless\ Technology|Zigbee"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the rcp-uart-802154 app built with default settings and can be used in combination with the OpenThread Border Router (OTBR) as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd4407a.demo.ot-rcp-dut-cpc-uart" label="Multiprotocol (OpenThread+Zigbee) - RCP DUT (CPC UART)">
+		<property key="blurb" value="Multiprotocol (OpenThread+Zigbee) - RCP DUT (CPC UART)"/>
+		<property key="partCompatibility" value=".*simg301m104lil.*"/>
+		<property key="boardCompatibility" value="brd4407a"/>
+		<property key="imageFile" value="demos/ot-rcp-dut-cpc-uart/ot-rcp-dut-cpc-uart-brd4407a.s37"/>
+		<property key="readmeFiles" value="ot-ncp/cpc/README-MP-RCP.md"/>
+		<property key="filters" value="Capability|Multiprotocol Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread Wireless\ Technology|Zigbee"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is the rcp-uart-802154 app built with default settings and can be used in combination with the OpenThread Border Router (OTBR) as the Device Under Test (DUT) in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-rcp-reference-device-11" label="OpenThread - RCP (Thread 1.1 Reference Device)">
+		<property key="blurb" value="OpenThread - RCP (Thread 1.1 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-rcp-reference-device-11/ot-rcp-reference-device-11-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-ncp/ot/README-OT-RCP.md"/>
+		<property key="filters" value="Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a simple OpenThread RCP application that can be used with the OpenThread border router as Thread 1.1 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-rcp-reference-device-12" label="OpenThread - RCP (Thread 1.2 Reference Device)">
+		<property key="blurb" value="OpenThread - RCP (Thread 1.2 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-rcp-reference-device-12/ot-rcp-reference-device-12-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-ncp/ot/README-OT-RCP.md"/>
+		<property key="filters" value="Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a simple OpenThread RCP application that can be used with the OpenThread border router as Thread 1.2 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-rcp-reference-device-13" label="OpenThread - RCP (Thread 1.3 Reference Device)">
+		<property key="blurb" value="OpenThread - RCP (Thread 1.3 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-rcp-reference-device-13/ot-rcp-reference-device-13-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-ncp/ot/README-OT-RCP.md"/>
+		<property key="filters" value="Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a simple OpenThread RCP application that can be used with the OpenThread border router as Thread 1.3 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-rcp-reference-device-14" label="OpenThread - RCP (Thread 1.4 Reference Device)">
+		<property key="blurb" value="OpenThread - RCP (Thread 1.4 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-rcp-reference-device-14/ot-rcp-reference-device-14-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-ncp/ot/README-OT-RCP.md"/>
+		<property key="filters" value="Device\ Type|RCP Project\ Difficulty|Advanced Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a simple OpenThread RCP application that can be used with the OpenThread border router as Thread 1.4 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-soc-reference-device-11" label="OpenThread - SoC CLI (Thread 1.1 Reference Device)">
+		<property key="blurb" value="OpenThread - SoC CLI (Thread 1.1 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-soc-reference-device-11/ot-soc-reference-device-11-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a very simple CLI application that can be used as Thread 1.1 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-soc-reference-device-12" label="OpenThread - SoC CLI (Thread 1.2 Reference Device)">
+		<property key="blurb" value="OpenThread - SoC CLI (Thread 1.2 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-soc-reference-device-12/ot-soc-reference-device-12-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a very simple CLI application that can be used as Thread 1.2 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-soc-reference-device-13" label="OpenThread - SoC CLI (Thread 1.3 Reference Device)">
+		<property key="blurb" value="OpenThread - SoC CLI (Thread 1.3 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-soc-reference-device-13/ot-soc-reference-device-13-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a very simple CLI application that can be used as Thread 1.3 reference device in the Thread test harness. </description>
+	</demo>
+	<demo name="brd2703a.demo.ot-soc-reference-device-14" label="OpenThread - SoC CLI (Thread 1.4 Reference Device)">
+		<property key="blurb" value="OpenThread - SoC CLI (Thread 1.4 Reference Device)"/>
+		<property key="partCompatibility" value=".*efr32mg24b210f1536im48.*"/>
+		<property key="boardCompatibility" value="brd2703a"/>
+		<property key="imageFile" value="demos/ot-soc-reference-device-14/ot-soc-reference-device-14-brd2703a.s37"/>
+		<property key="readmeFiles" value="ot-cli/README.md"/>
+		<property key="filters" value="Device\ Type|SoC Project\ Difficulty|Beginner Wireless\ Technology|Thread"/>
+		<property key="quality" value="INTERNAL"/>
+		<description>This is a very simple CLI application that can be used as Thread 1.4 reference device in the Thread test harness. </description>
+	</demo>
+</demos>

@@ -895,6 +895,13 @@ void Mac::ProcessTransmitSecurity(TxFrame &aFrame)
 
     case Frame::kKeyIdMode1:
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    if(aFrame.IsTxTimestampEnabled())
+    {
+        ot::TimeSyncService::TimeSyncService::HandleTimeSyncFrame(aFrame);
+        goto exit;
+    }
+#endif
         // For 15.4 radio link, the AES CCM* and frame security counter (under MAC
         // key ID mode 1) are managed by `SubMac` or `Radio` modules.
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE

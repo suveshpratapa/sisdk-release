@@ -1706,6 +1706,9 @@ void Mle::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageIn
         case kCommandLinkRequest:
         case kCommandLinkAccept:
         case kCommandLinkAcceptAndRequest:
+#if PRIORITIZED_ROUTING_ENABLE
+        case kTypePrioritizedAdvertisement:
+#endif
             break;
 
         default:
@@ -1796,6 +1799,13 @@ void Mle::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageIn
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     case kCommandLinkProbe:
         HandleLinkProbe(rxInfo);
+        break;
+#endif
+
+
+#if PRIORITIZED_ROUTING_ENABLE
+    case kCommandPrioritizedAdvertisement:
+        HandlePrioritizedAdvertisement(rxInfo);
         break;
 #endif
 
@@ -3001,6 +3011,15 @@ const char *Mle::MessageTypeToString(MessageType aType)
         ValidateNextEnum(kTypeP2pLinkTearDown);
 #endif
     };
+
+#if PRIORITIZED_ROUTING_ENABLE
+    static_assert(kTypePrioritizedAdvertisement == 199, "kTypePrioritizedAdvertisement value is incorrect");
+
+    if (aType == kTypePrioritizedAdvertisement)
+    {
+        return "VendorAdvertisement";
+    }
+#endif
 
     return kMessageTypeStrings[aType];
 }

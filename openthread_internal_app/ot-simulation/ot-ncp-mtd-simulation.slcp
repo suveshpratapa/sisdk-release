@@ -1,0 +1,54 @@
+project_name: ot-ncp-mtd-simulation
+label: OpenThread - NCP CLI MTD (simulation)
+package: openthread
+description:  >
+  This is the ot-ncp-mtd app built for simulation.
+category: OpenThread Examples
+quality: internal
+
+component:
+  - id: ot_stack_mtd
+  - id: ot_ncp_source
+  - id: native
+  - id: ot_simulation
+  - id: ot_reset_utils
+
+include:
+  - path: .
+    file_list:
+    - path: app.h
+
+source:
+  - path: main.c
+    unless:
+      - sl_main
+  - path: app.c
+
+configuration:
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 4608
+    condition: [sl_main]
+  - name: SL_MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+    value: 1
+  - name: SL_MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
+    value: 1
+
+readme:
+  - path: ../ot-ncp/ot/README-OT-NCP.md
+
+tag:
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread"]
+  - name: "Device Type"
+    value: ["NCP"]
+  - name: "Project Difficulty"
+    value: ["Advanced"]
+
+ui_hints:
+  highlight:
+    - path: ../ot-ncp/ot/README-OT-NCP.md
+      focus: true

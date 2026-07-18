@@ -452,6 +452,10 @@ void Mle::HandleAdvertiseTrickleTimer(void)
 
     SendMulticastAdvertisement();
 
+#if PRIORITIZED_ROUTING_ENABLE
+    SendPrioritizedAdvertisement();
+#endif
+
 exit:
     return;
 }

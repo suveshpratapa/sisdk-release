@@ -38,6 +38,11 @@
 
 #include "thread/neighbor.hpp"
 
+
+#if PRIORITIZED_ROUTING_ENABLE
+#include "thread/prioritized_routing_defs.hpp"
+#endif
+
 namespace ot {
 
 class Parent;
@@ -227,6 +232,59 @@ public:
     void DecrementParentReselectTimeout(void) { (mParentReselectTimeout > 0) ? mParentReselectTimeout-- : 0; }
 #endif
 
+#if PRIORITIZED_ROUTING_ENABLE
+    /**
+     * Gets the router ID of the next hop to this router via vendor's router
+     *
+     * @returns The router ID of the next hop to this router via vendor's router
+     *
+     */
+    uint8_t GetPrioritizedNextHop(void) const { return mPrioritizedNextHop; }
+
+    /**
+     * Get the route cost to this router via prioritized routers
+     *
+     * @returns The route cost to this router via prioritized routers
+     *
+     */
+    uint8_t GetPrioritizedCost(void) const { return mPrioritizedCost; }
+
+    /**
+     * Sets the prioritized next hop and prioritized cost to this router.
+     *
+     * @param[in]  aNextHop  The Router ID of the next hop to this router via prioritized router
+     * @param[in]  aCost     The cost to this router via prioritized router
+     *
+     * @retval TRUE   If there was a change, i.e., @p aNextHop or @p aCost were different from their previous values.
+     * @retval FALSE  If no change to next hop and cost values (new values are the same as before).
+     *
+     */
+    bool SetPrioritizedNextHopAndCost(uint8_t aNextHop, uint8_t aCost);
+
+    /**
+     * Sets the prioritized next hop to this router as invalid and clears the cost.
+     *
+     * @retval TRUE   If there was a change (next hop via prioritized router was valid before).
+     * @retval FALSE  No change to next hop (next hop via prioritized router was invalid before).
+     *
+     */
+    bool SetPrioritizedNextHopToInvalid(void);
+
+    /**
+     * Gets whether this router is prioritized routing capable.
+     *
+     * @returns True if this router is prioritized routing capable, false otherwise.
+     */
+    bool IsDevicePrioritizedRoutingCapable(void) const { return mIsDevicePrioritizedRoutingCapable; }
+
+    /**
+     * Sets whether this router is prioritized routing capable.
+     *
+     * @param[in]  aCapable  True if this router is prioritized routing capable, false otherwise.
+     */
+    void SetDevicePrioritizedRoutingCapable(bool aCapable) { mIsDevicePrioritizedRoutingCapable = aCapable; }
+#endif // PRIORITIZED_ROUTING_ENABLE
+
 private:
     static_assert(Mle::kLinkAcceptTimeout < 4, "kLinkAcceptTimeout won't fit in mLinkAcceptTimeout (2-bit field)");
     static_assert(Mle::kLinkRequestAttempts < 4, "kLinkRequestAttempts won't fit in mLinkRequestAttempts (2-bit field");
@@ -247,6 +305,15 @@ private:
 #if OPENTHREAD_CONFIG_PARENT_SEARCH_ENABLE
     uint16_t mIsSelectableAsParent : 1;
     uint16_t mParentReselectTimeout : 15;
+#endif
+#if PRIORITIZED_ROUTING_ENABLE
+    uint8_t mPrioritizedNextHop; ///< The next hop towards this router via specified prioritized routing
+#if OPENTHREAD_CONFIG_MLE_LONG_ROUTES_ENABLE
+    uint8_t mPrioritizedCost; ///< The cost to this router via neighbor prioritized router
+#else
+    uint8_t mPrioritizedCost : 4; ///< The cost to this router via neighbor prioritized router
+#endif
+    bool mIsDevicePrioritizedRoutingCapable : 1; ///<  Whether this router is prioritized routing capable
 #endif
 };
 

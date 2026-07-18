@@ -106,6 +106,7 @@ typedef struct otThreadLinkInfo
 
     // Applicable only when OPENTHREAD_CONFIG_MULTI_RADIO feature is enabled.
     uint8_t mRadioType; ///< Radio link type.
+    uint64_t mRadioTime; ///< Radio clock time when the first fragment of this message was received.
 } otThreadLinkInfo;
 
 /**
@@ -394,6 +395,33 @@ uint16_t otMessageRead(const otMessage *aMessage, uint16_t aOffset, void *aBuf, 
  * @sa otMessageRead
  */
 int otMessageWrite(otMessage *aMessage, uint16_t aOffset, const void *aBuf, uint16_t aLength);
+
+/**
+ * Enables TX timestamp injection.
+ *
+ * @param[in]  aMessage  A pointer to a message buffer.
+ *
+ */
+void otMessageEnableTxTimestamp(otMessage *aMessage);
+
+/**
+ * Returns the radio time at which the message is received.
+ *
+ * @param[in]  aMessage  A pointer to a message buffer.
+ *
+ * @returns The radio time at which the message is received
+ */
+uint64_t otMessageGetRadioTime(const otMessage *aMessage);
+
+/**
+ * Sets the radio time at which the message is received.
+ *
+ * @param[in]  aMessage  A pointer to a message buffer.
+ * @param[in]  aRadioTime  radio time at which the message is received.
+ *
+ * @returns None.
+ */
+void otMessageSetRadioTime(otMessage *aMessage, uint64_t aRadioTime);
 
 /**
  * Represents an OpenThread message queue.

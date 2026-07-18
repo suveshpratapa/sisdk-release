@@ -1,0 +1,28 @@
+id: ot_warnings_are_errors
+label: "Toolchain setting to treat warnings as errors for GCC and IAR"
+package: openthread
+description: >
+  OpenThread component to treat application build warnings as errors by
+  adding the compiler flags.
+category: OpenThread
+quality: internal
+provides:
+- name: ot_warnings_are_errors
+toolchain_settings:
+- option: gcc_compiler_option
+  value: -Wall
+- option: gcc_compiler_option
+  value: -Wextra
+- option: gcc_compiler_option
+  value: -Werror
+  # llvm compiler options
+- option: llvm_compiler_option
+  value: -Wall
+- option: llvm_compiler_option
+  value: -Wextra
+- option: llvm_compiler_option
+  value: -Werror
+
+ui_hints:
+  visibility: never
+root_path: openthread_internal

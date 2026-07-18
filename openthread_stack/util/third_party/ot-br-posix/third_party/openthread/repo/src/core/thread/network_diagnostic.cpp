@@ -35,6 +35,11 @@
 
 #include "instance/instance.hpp"
 
+
+#if PRIORITIZED_ROUTING_ENABLE
+#include "thread/network_diagnostic_prioritized_route.hpp"
+#endif
+
 namespace ot {
 
 RegisterLogModule("NetDiag");
@@ -639,6 +644,14 @@ Error Server::AppendDiagTlv(uint8_t aTlvType, Message &aMessage)
         error = Tlv::Append<MaxChildTimeoutTlv>(aMessage, maxTimeout);
         break;
     }
+#ifdef PRIORITIZED_ROUTING_ENABLE
+    case Tlv::kEnhancedPrioritizedRoute:
+    {
+        PrioritizedRouteNetworkDiagnostic prioritizedRouteDiag(GetInstance());
+        error = prioritizedRouteDiag.AppendEnhancedPrioritizedRoute(aMessage);
+    }
+    break;
+#endif
 
 #endif // OPENTHREAD_FTD
 

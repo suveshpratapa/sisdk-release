@@ -241,6 +241,10 @@ protected:
 #if OPENTHREAD_FTD
         ChildMask mChildMask; // ChildMask to indicate which sleepy children need to receive this.
 #endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+        bool    mTxTimestamp : 1;   // Whether TX timestamp is enabled.
+        uint64_t    mRadioTime; // The message radio time.
+#endif
     };
 
     static_assert(kSize > sizeof(Metadata) + sizeof(otMessageBuffer), "Metadata does not fit in a single buffer");
@@ -1450,6 +1454,47 @@ public:
      */
     uint8_t GetTimeSyncSeq(void) const { return GetMetadata().mTimeSyncSeq; }
 #endif // OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    /**
+     * Returns the message radio timestamp.
+     *
+     * The message radio timestamp contains 32 least significant bits of the radio clock time when
+     * the first fragment of this message was received.
+     *
+     * @returns The message radio timestamp.
+     *
+     */
+    uint64_t GetRadioTime(void) const { return GetMetadata().mRadioTime; }
+
+    /**
+     * Sets the message radio timestamp to a given time.
+     *
+     * The message radio timestamp contains 32 least significant bits of the radio clock time when
+     * the first fragment of this message was received.
+     *
+     * @param[in] aTimestamp   The radio timestamp value.
+     *
+     */
+    void SetRadioTime(uint64_t aTimestamp) { GetMetadata().mRadioTime = aTimestamp; }
+
+    /**
+     * Indicates whether or not TX timestamp is enabled for the message.
+     *
+     * @retval TRUE   If TX timestamp is enabled.
+     * @retval FALSE  If TX timestamp is not enabled.
+     *
+     */
+    bool IsTxTimestampEnabled(void) const { return GetMetadata().mTxTimestamp; }
+
+    /**
+     * Sets whether or not TX timestamp is enabled for the message.
+     *
+     * @param[in]  aEnabled  TRUE if TX timestamp is enabled, FALSE otherwise.
+     *
+     */
+    void SetTxTimestampEnabled(bool aEnabled) { GetMetadata().mTxTimestamp = aEnabled; }
+#endif
 
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     /**

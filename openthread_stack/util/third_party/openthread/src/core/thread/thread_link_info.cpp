@@ -83,6 +83,10 @@ void ThreadLinkInfo::SetFrom(const Mac::RxFrame &aFrame)
 #if OPENTHREAD_CONFIG_MULTI_RADIO
     mRadioType = static_cast<uint8_t>(aFrame.GetRadioType());
 #endif
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+   mRadioTime = aFrame.GetTimestamp();
+#endif
 }
 
 } // namespace ot

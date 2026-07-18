@@ -1,0 +1,29 @@
+id: ot_example_cli
+label: Example CLI
+package: openthread
+category: OpenThread|Internal
+quality: internal
+description: This is an example component that demonstrates what is needed to add a new CLI command to OT for both SoC and RCP builds.
+provides:
+- name: ot_example_cli
+requires:
+- name: ot_stack
+- name: sl_ot_custom_cli
+recommends:
+- id: ot_stack_ftd
+  vendor: silabs
+source:
+- path: src/cli/example_cli.c
+define:
+- name: SL_OPENTHREAD_EXAMPLE_CLI_ENABLE
+  value: 1
+template_contribution:
+- name: sl_ot_cli_command
+  value:
+    macro: "SL_OPENTHREAD_EXAMPLE_CLI_ENABLE"
+    name: "example"
+    handler: "exampleCliCommand"
+metadata:
+  sbom:
+    license: Zlib
+root_path: openthread_internal

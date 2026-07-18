@@ -59,6 +59,7 @@ source:
 - path: api/network_time_api.cpp
 - path: api/p2p_api.cpp
 - path: api/ping_sender_api.cpp
+- path: api/prioritized_routing_api.cpp
 - path: api/radio_stats_api.cpp
 - path: api/random_crypto_api.cpp
 - path: api/random_noncrypto_api.cpp
@@ -72,6 +73,7 @@ source:
 - path: api/tcp_ext_api.cpp
 - path: api/thread_api.cpp
 - path: api/thread_ftd_api.cpp
+- path: api/timeSyncService_api.cpp
 - path: api/trel_api.cpp
 - path: api/udp_api.cpp
 - path: api/verhoeff_checksum_api.cpp
@@ -214,6 +216,7 @@ source:
 - path: thread/discover_scanner.cpp
 - path: thread/dua_manager.cpp
 - path: thread/energy_scan_server.cpp
+- path: thread/enhanced_prioritized_route_tlv_entry.cpp
 - path: thread/indirect_sender.cpp
 - path: thread/key_manager.cpp
 - path: thread/link_metrics.cpp
@@ -227,6 +230,9 @@ source:
 - path: thread/mle.cpp
 - path: thread/mle_ftd.cpp
 - path: thread/mle_p2p.cpp
+- path: thread/mle_prioritized_router.cpp
+- path: thread/mle_prioritized_route_table.cpp
+- path: thread/mle_prioritized_routing_extensions.cpp
 - path: thread/mle_tlvs.cpp
 - path: thread/mle_types.cpp
 - path: thread/mlr_manager.cpp
@@ -242,10 +248,12 @@ source:
 - path: thread/network_data_tlvs.cpp
 - path: thread/network_data_types.cpp
 - path: thread/network_diagnostic.cpp
+- path: thread/network_diagnostic_prioritized_route.cpp
 - path: thread/network_diagnostic_tlvs.cpp
 - path: thread/panid_query_server.cpp
 - path: thread/peer.cpp
 - path: thread/peer_table.cpp
+- path: thread/prioritized_router.cpp
 - path: thread/radio_selector.cpp
 - path: thread/router.cpp
 - path: thread/router_table.cpp
@@ -253,6 +261,7 @@ source:
 - path: thread/thread_link_info.cpp
 - path: thread/thread_netif.cpp
 - path: thread/time_sync_service.cpp
+- path: thread/TimeSyncService.cpp
 - path: thread/tmf.cpp
 - path: thread/uri_paths.cpp
 - path: thread/version.cpp

@@ -1347,6 +1347,41 @@ public:
      */
     void SetTxDelayBaseTime(uint32_t aTxDelayBaseTime) { mInfo.mTxInfo.mTxDelayBaseTime = aTxDelayBaseTime; }
 #endif
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+ /**
+     * Indicates whether or not TX Timestamp is enabled.
+     *
+     * @retval TRUE   TX Timestamp is enabled.
+     * @retval FALSE  TX Timestamp is not enabled is not enabled.
+     *
+     */
+    bool IsTxTimestampEnabled(void) const { return mInfo.mTxInfo.mTxTimestampEnabled; }
+
+    /**
+     * Sets the TX Timestamp enabled attribute.
+     *
+     * @param[in]  aTxTimestampEnabled  TRUE if TX Timestamp must be enabled for this packet, FALSE otherwise.
+     *
+     */
+    void SetTxTimestampEnabled(bool aTxTimestampEnabled) { mInfo.mTxInfo.mTxTimestampEnabled = aTxTimestampEnabled; }
+    
+    /**
+     * Returns the message timestamp for forarding packet.
+     *
+     * @returns The message timestamp.
+     *
+     */
+    uint64_t GetRxRadioTimestampForForwardingPacket(void) const { return mInfo.mTxInfo.mRxRadioTimestampForForwardingPacket; }
+
+    /**
+     * Sets the message timestamp for a forwarding packet.
+     *
+     * @param[in] aTimestamp   The timestamp value.
+     *
+     */
+    void SetRxRadioTimestampForForwardingPacket(uint64_t aTimestamp) { mInfo.mTxInfo.mRxRadioTimestampForForwardingPacket = aTimestamp; }
+#endif
 };
 
 OT_TOOL_PACKED_BEGIN

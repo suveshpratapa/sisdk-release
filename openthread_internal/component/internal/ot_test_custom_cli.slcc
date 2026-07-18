@@ -1,0 +1,50 @@
+id: ot_test_custom_cli
+label: OT Internal Custom CLI Component
+package: openthread
+category: OpenThread|Internal
+quality: internal
+description: This component provides additional CLI commands for internal testing.
+provides:
+- name: ot_test_custom_cli
+requires:
+- name: ot_test_custom_cli_config
+- name: ot_debug_channel
+  condition: [ot_cli]
+- name: sl_ot_custom_cli
+  condition: [ot_cli]
+- name: ot_perf_test_cli
+  condition: [ot_stack_full, ot_cli]
+- name: ot_ncp_vendor_extension
+  condition: [ot_ncp]
+template_contribution:
+- name: ot_init
+  value: sl_ot_test_custom_cli_init
+  priority: 30
+  condition: [sl_ot_custom_cli]
+- name: sl_ot_cli_command
+  value:
+    name: "test"
+    handler: "testCommand"
+    macro: "SL_OPENTHREAD_TEST_CLI_ENABLE"
+  condition: [sl_ot_custom_cli]
+- name: component_catalog
+  value: openthread_test_cli
+include:
+- path: include/util
+  unless: [ot_ncp]
+- path: platform-abstraction/ncp/
+  condition: [ot_ncp]
+  file_list:
+  - path: ncp_test.hpp
+source:
+- path: src/cli/test_cli.c
+  unless: [ot_rcp]
+- path: platform-abstraction/ncp/ncp_test.cpp
+  condition: [ot_ncp]
+define:
+- name: SL_OPENTHREAD_TEST_CLI_ENABLE
+  value: 1
+metadata:
+  sbom:
+    license: Zlib
+root_path: openthread_internal

@@ -671,6 +671,14 @@ Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
 
     mSendBusy = true;
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    frame->SetTxTimestampEnabled(mSendMessage->IsTxTimestampEnabled());
+    if(frame->IsTxTimestampEnabled())
+    {
+        frame->SetRxRadioTimestampForForwardingPacket(mSendMessage->GetRadioTime());
+    }
+#endif
+
     switch (mSendMessage->GetType())
     {
     case Message::kTypeIp6:

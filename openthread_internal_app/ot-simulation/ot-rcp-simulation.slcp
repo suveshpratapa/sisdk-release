@@ -1,0 +1,51 @@
+project_name: ot-rcp-simulation
+label: OpenThread - RCP CLI (simulation)
+package: openthread
+description: >
+  This is the ot-rcp app built for simulation.
+category: OpenThread Examples
+quality: internal
+
+component:
+  - id: ot_stack_rcp
+  - id: native
+  - id: ot_simulation
+  - id: ot_reset_utils
+
+include:
+  - path: .
+    file_list:
+    - path: app.h
+
+source:
+  - path: main.c
+    unless:
+      - sl_main
+  - path: app.c
+
+configuration:
+  - name: SL_MAIN_START_TASK_STACK_SIZE_BYTES
+    value: 2752
+    condition: [sl_main]
+  - name: OPENTHREAD_CONFIG_HEAP_EXTERNAL_ENABLE
+    value: 0
+    
+readme:
+  - path: ../ot-ncp/ot/README-OT-RCP.md
+
+tag:
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+
+filter:
+  - name: "Wireless Technology"
+    value: ["Thread"]
+  - name: "Device Type"
+    value: ["RCP"]
+  - name: "Project Difficulty"
+    value: ["Advanced"]
+
+ui_hints:
+  highlight:
+    - path: ../ot-ncp/ot/README-OT-RCP.md
+      focus: true

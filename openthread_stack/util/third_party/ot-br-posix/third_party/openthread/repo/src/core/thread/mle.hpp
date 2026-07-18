@@ -1498,6 +1498,9 @@ private:
         kTypeP2pLinkAccept,
         kTypeP2pLinkTearDown,
 #endif
+#if PRIORITIZED_ROUTING_ENABLE
+        kTypePrioritizedAdvertisement = 199,
+#endif
     };
 
 #if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
@@ -1562,6 +1565,9 @@ private:
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
         Error AppendCslClockAccuracyTlv(void);
+#endif
+#if PRIORITIZED_ROUTING_ENABLE
+        Error AppendPrioritizedRouteTlv(Neighbor *aNeighbor = nullptr);
 #endif
 #if OPENTHREAD_FTD
         Error AppendRouteTlv(Neighbor *aNeighbor = nullptr);
@@ -2435,6 +2441,14 @@ private:
 #endif
 
 #endif // OPENTHREAD_FTD
+
+#if PRIORITIZED_ROUTING_ENABLE
+        void  HandlePrioritizedAdvertisement(RxInfo &aRxInfo);
+        void  SendPrioritizedAdvertisement(void);
+        Error HandlePrioritizedAdvertisement(RxInfo &aRxInfo, uint16_t aSourceAddress, const LeaderData &aLeaderData);
+        Error ProcessPrioritizedRouteTlv(const RouteTlv &aRouteTlv, RxInfo &aRxInfo);
+#endif
+
 
     //------------------------------------------------------------------------------------------------------------------
     // Variables

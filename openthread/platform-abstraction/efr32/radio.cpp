@@ -54,6 +54,9 @@
 #include "utils/code_utils.h"
 #include "utils/link_metrics.h"
 #include "utils/mac_frame.h"
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+#include "thread/TimeSyncPacket.hpp"
+#endif // FEATURE_TIMESYNCSERVICE_ENABLE
 
 extern "C" {
 #include "em_device.h"
@@ -181,6 +184,15 @@ otExtAddress       sExtAddress[RADIO_EXT_ADDR_COUNT];
 #define IEEE802154_2015_ENH_ACK_TIMING_RX_TO_TX_US 256
 #endif
 #define CSL_CSMA_BACKOFF_TIME_IN_US 150
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+// Includes csma backoff (150), cca (128) and rx-to-tx turnaround time duration.
+// Default values is based on logic analyzer measurements for xg24 platform.
+#define DEFAULT_CSMA_BACKOFF_TO_RX_TO_TX_TURNAROUND_US 410
+// To calculate dynamically since it can vary based on the platform.
+volatile uint16_t csmaBackoffToRxToTxTurnaroundTime = DEFAULT_CSMA_BACKOFF_TO_RX_TO_TX_TURNAROUND_US;
+#endif // FEATURE_TIMESYNCSERVICE_ENABLE
+static sl_rail_time_t scheduledTxStartTime = 0;
+
 sl_rail_csma_config_t csmaConfig    = SL_RAIL_CSMA_CONFIG_802_15_4_2003_2P4_GHZ_OQPSK_CSMA;
 sl_rail_csma_config_t cslCsmaConfig = SL_RAIL_CSMA_CONFIG_SINGLE_CCA;
 
@@ -865,7 +877,17 @@ void sli_ot_radio_events_process_callback(sl_rail_handle_t aRailHandle, sl_rail_
 
 void sli_ot_radio_events_process_tx_events(sl_rail_events_t aEvents)
 {
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    // Update csma backoff to rx-to-tx turnaround time only for scheduled transmits.
+    if (aEvents & SL_RAIL_EVENT_TX_STARTED && (sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay != 0))
+    {
+        csmaBackoffToRxToTxTurnaroundTime =
+            sli_ot_radio_interface_rail_get_tx_preamble_duration() - scheduledTxStartTime;
+    }
+    else if (aEvents & SL_RAIL_EVENT_TX_PACKET_SENT)
+#else  //! FEATURE_TIMESYNCSERVICE_ENABLE
     if (aEvents & SL_RAIL_EVENT_TX_PACKET_SENT)
+#endif // FEATURE_TIMESYNCSERVICE_ENABLE
     {
         processTxPacketSentEvent();
     }
@@ -1194,6 +1216,59 @@ exit:
 }
 #endif // (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+bool validateAndUpdateTimeSyncFrame(otInstance *aInstance, otRadioFrame *aTimeSyncFrame)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    bool                                           isValidateTimeSyncFrame = false;
+    otMacAddress                                   destAddress;
+    uint8_t                                       *payload       = NULL;
+    uint16_t                                       payloadLength = 0;
+    ot::TimeSyncService::TimeSyncPacketMessageType message_type  = {};
+    ot::TimeSyncService::TimeSyncPacketType        packetType;
+    uint32_t                                       f2ota_timeStamp = 0;
+
+    otEXPECT(aTimeSyncFrame != NULL);
+
+    otEXPECT(otMacFrameGetDstAddr(aTimeSyncFrame, &destAddress) == OT_ERROR_NONE);
+
+    // ToDo: Is it okay to reject the timeSync Frame if the destination address is not short?
+    otEXPECT_ACTION(destAddress.mType == OT_MAC_ADDRESS_TYPE_SHORT, isValidateTimeSyncFrame = false);
+
+    payload       = efr32GetPayload(aTimeSyncFrame);
+    payloadLength = efr32GetPayloadLength(aTimeSyncFrame);
+
+    // otDumpDebgPlat("TSF: payload", payload, payloadLength);
+
+    otEXPECT_ACTION(payload != NULL && (payloadLength >= TIMESYNC_MSG_TYPE_OFFSET), isValidateTimeSyncFrame = false);
+
+    memcpy(&message_type, &payload[payloadLength - TIMESYNC_MSG_TYPE_OFFSET], sizeof(message_type));
+
+    packetType = static_cast<ot::TimeSyncService::TimeSyncPacketType>(message_type.messageType);
+
+    // otLogInfoPlat("TSF: packetType = %s", packetType == ot::TimeSyncService::TIMESYNC_PACKET ? "TIMESYNC_PACKET" :
+    // "TIMESYNC_PACKET_ACK");
+
+    if (packetType == ot::TimeSyncService::TIMESYNC_PACKET || packetType == ot::TimeSyncService::TIMESYNC_PACKET_ACK)
+    {
+        isValidateTimeSyncFrame = true;
+
+        // Subtracting (SHR_DURATION_US + cslCsmaConfig.cca_backoff_us) to keep the existing CSL scheduling logic.
+        f2ota_timeStamp = (uint32_t)(sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime
+                                     + sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay
+                                     + csmaBackoffToRxToTxTurnaroundTime - CSL_CSMA_BACKOFF_TIME_IN_US);
+
+        memcpy(&payload[payloadLength - sizeof(f2ota_timeStamp)], &f2ota_timeStamp, sizeof(f2ota_timeStamp));
+
+        // otDumpDebgPlat("TSF: stamped payload", payload, payloadLength);
+    }
+
+exit:
+    return isValidateTimeSyncFrame;
+}
+#endif
+
 template <typename EventCallback> static void efr32ConfigInit(EventCallback aEventCallback)
 {
     // Set event callback in common config
@@ -1210,6 +1285,9 @@ template <typename EventCallback> static void efr32ConfigInit(EventCallback aEve
                                        | SL_RAIL_EVENT_TX_SCHEDULED_TX_STARTED | SL_RAIL_EVENT_TX_SCHEDULED_TX_MISSED
                                        | SL_RAIL_EVENT_RX_SCHEDULED_RX_STARTED | SL_RAIL_EVENT_RX_SCHEDULED_RX_END
                                        | SL_RAIL_EVENT_RX_SCHEDULED_RX_MISSED
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+                                       | SL_RAIL_EVENT_TX_STARTED
+#endif // FEATURE_TIMESYNCSERVICE_ENABLE
 #endif
                                        | SL_RAIL_EVENTS_TXACK_COMPLETION | SL_RAIL_EVENTS_TX_COMPLETION
                                        | SL_RAIL_EVENT_IEEE802154_DATA_REQUEST_COMMAND
@@ -1541,22 +1619,37 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
         sli_ot_radio_csl_set_present(aInstance, aFrame->mInfo.mTxInfo.mCslPresent);
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-        if (sli_ot_radio_csl_get_period(aInstance) > 0 && sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay == 0)
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || FEATURE_TIMESYNCSERVICE_ENABLE
         {
-            // Only called for CSL children (CSL period > 0)
-            // Note: Our SSEDs "schedule" transmissions to their parent in order to know
-            // exactly when in the future the data packets go out so they can calculate
-            // the accurate CSL phase to send to their parent.
-            sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime = sl_rail_get_time(SL_RAIL_EFR32_HANDLE);
-            sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay =
-                SCHEDULE_TX_DELAY_US; // Chosen after internal certification testing
-            sli_ot_radio_csl_set_present(aInstance, true);
+            bool shouldScheduleTx = false;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+            shouldScheduleTx = (sli_ot_radio_csl_get_period(aInstance) > 0);
+#endif
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+            shouldScheduleTx = shouldScheduleTx || sCurrentTxPacket->frame.mInfo.mTxInfo.mTxTimestampEnabled;
+#endif
+            if (shouldScheduleTx && sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay == 0)
+            {
+                // Only called for CSL children (CSL period > 0) or time-sync TX timestamp frames.
+                // Note: Our SSEDs "schedule" transmissions to their parent in order to know
+                // exactly when in the future the data packets go out so they can calculate
+                // the accurate CSL phase to send to their parent.
+                sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime = sl_rail_get_time(SL_RAIL_EFR32_HANDLE);
+                sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay =
+                    SCHEDULE_TX_DELAY_US; // Chosen after internal certification testing
+            }
         }
 #endif
         updateIeInfoTxFrame(sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime
                             + sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay + SHR_DURATION_US);
 
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+        if (sCurrentTxPacket->frame.mInfo.mTxInfo.mTxTimestampEnabled)
+        {
+            (void)validateAndUpdateTimeSyncFrame(sCurrentTxPacket->instance, &sCurrentTxPacket->frame);
+        }
+#endif
         // Note - we need to call this outside of txCurrentPacket as for Series 2,
         // this results in calling the SE interface from a critical section which is not permitted.
         (void)sli_ot_radio_security_process_transmit(&sCurrentTxPacket->frame, sCurrentTxPacket->instance);
@@ -1758,15 +1851,16 @@ void txCurrentPacket(void)
         // Note that both use single CCA config, overriding any CCA/CSMA configs from the stack
         //
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
-        sl_rail_scheduled_tx_config_t scheduleTxOptions = {
-            .when = sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime
-                    + sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay - SHR_DURATION_US,
-            .mode         = SL_RAIL_TIME_ABSOLUTE,
-            .tx_during_rx = SL_RAIL_SCHEDULED_TX_DURING_RX_POSTPONE_TX};
-
         // Set ccaBackoff to some constant value, so we have predictable radio warmup time for schedule tx.
         cslCsmaConfig.cca_backoff_us = CSL_CSMA_BACKOFF_TIME_IN_US;
-        scheduleTxOptions.when -= cslCsmaConfig.cca_backoff_us;
+
+        scheduledTxStartTime = sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime
+                               + sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay
+                               - (SHR_DURATION_US + cslCsmaConfig.cca_backoff_us);
+
+        sl_rail_scheduled_tx_config_t scheduleTxOptions = {.when         = scheduledTxStartTime,
+                                                           .mode         = SL_RAIL_TIME_ABSOLUTE,
+                                                           .tx_during_rx = SL_RAIL_SCHEDULED_TX_DURING_RX_POSTPONE_TX};
 
         // CSL transmissions don't use CSMA but MAC accounts for single CCA time.
         // cslCsmaConfig is set to SL_RAIL_CSMA_CONFIG_SINGLE_CCA above.

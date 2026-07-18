@@ -291,6 +291,7 @@ int16_t  sli_ot_radio_interface_rail_get_rssi(sl_rail_time_t wait_timeout_us);
 
 // RAIL timing configuration access
 uint32_t sli_ot_radio_interface_rail_get_rx_to_tx_timing(void);
+uint32_t sli_ot_radio_interface_rail_get_tx_preamble_duration(void);
 
 // RAIL configuration
 sl_rail_status_t sli_ot_radio_interface_rail_config_channels(

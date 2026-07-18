@@ -35,10 +35,12 @@ include:
   - path: cli_mesh_diag.hpp
   - path: cli_network_data.hpp
   - path: cli_ping.hpp
+  - path: cli_prioritized_routing.hpp
   - path: cli_srp_client.hpp
   - path: cli_srp_server.hpp
   - path: cli_tcat.hpp
   - path: cli_tcp.hpp
+  - path: cli_timeSyncService.hpp
   - path: cli_udp.hpp
   - path: cli_utils.hpp
   - path: x509_cert_key.hpp
@@ -62,10 +64,12 @@ source:
 - path: util/third_party/openthread/src/cli/cli_mesh_diag.cpp
 - path: util/third_party/openthread/src/cli/cli_network_data.cpp
 - path: util/third_party/openthread/src/cli/cli_ping.cpp
+- path: util/third_party/openthread/src/cli/cli_prioritized_routing.cpp
 - path: util/third_party/openthread/src/cli/cli_srp_client.cpp
 - path: util/third_party/openthread/src/cli/cli_srp_server.cpp
 - path: util/third_party/openthread/src/cli/cli_tcat.cpp
 - path: util/third_party/openthread/src/cli/cli_tcp.cpp
+- path: util/third_party/openthread/src/cli/cli_timeSyncService.cpp
 - path: util/third_party/openthread/src/cli/cli_udp.cpp
 - path: util/third_party/openthread/src/cli/cli_utils.cpp
 template_contribution:

@@ -1,0 +1,27 @@
+id: ot_memory_usage_cli
+label: Memory Usage - OpenThread CLI
+package: openthread
+category: Utility|Memory
+quality: internal
+description: Provides CLI commands for accessing flash and RAM usage metrics on Host (POSIX), SoC, and NCP applications. CLI support is excluded for RCP builds.
+provides:
+- name: ot_memory_usage_cli
+requires:
+- name: sl_ot_custom_cli
+template_contribution:
+- name: sl_ot_cli_command
+  value:
+    name: "memoryusage"
+    handler: "memoryUsageHandler"
+    macro: "SL_OPENTHREAD_MEMORY_USAGE_CLI_ENABLE"
+- name: component_catalog
+  value: openthread_memory_usage_cli
+source:
+- path: src/cli/memory_usage_cli.c
+define:
+- name: SL_OPENTHREAD_MEMORY_USAGE_CLI_ENABLE
+  value: 1
+metadata:
+  sbom:
+    license: MSLA
+root_path: openthread_internal

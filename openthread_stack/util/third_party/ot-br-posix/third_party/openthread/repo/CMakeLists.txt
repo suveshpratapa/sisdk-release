@@ -80,11 +80,6 @@ if (CMAKE_BUILD_TYPE)
 endif ()
 
 if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "(Apple)?[Cc]lang")
-    option(OT_COMPILE_WARNING_AS_ERROR "whether to include -Werror -pedantic-errors with gcc-compatible compilers")
-    if (OT_COMPILE_WARNING_AS_ERROR)
-        set(OT_CFLAGS -Werror -pedantic-errors)
-    endif()
-
     if(OT_COVERAGE)
         target_compile_definitions(ot-config INTERFACE "OPENTHREAD_ENABLE_COVERAGE=1")
         target_compile_options(ot-config INTERFACE -g -O0 --coverage)

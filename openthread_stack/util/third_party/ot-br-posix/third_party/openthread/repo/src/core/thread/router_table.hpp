@@ -393,6 +393,151 @@ public:
     Error SetRouterIdRange(uint8_t aMinRouterId, uint8_t aMaxRouterId);
 #endif
 
+#if PRIORITIZED_ROUTING_ENABLE
+    /**
+     * Returns whether prioritized routing is enabled.
+     *
+     * @returns TRUE if prioritized routing is enabled, FALSE otherwise.
+     */
+    bool IsPrioritizedRoutingEnabled(void) const;
+
+    /**
+     * Sets whether prioritized routing is enabled.
+     *
+     * @param[in]  aEnabled  TRUE if prioritized routing should be enabled, FALSE otherwise.
+     */
+    void SetPrioritizedRoutingEnabled(bool aEnabled) { mIsPrioritizedRoutingEnabled = aEnabled; }
+
+    /**
+     * Returns the prioritized route cost threshold.
+     *
+     * @returns The prioritized route cost threshold value.
+     */
+    uint8_t GetPrioritizedRouteCostThreshold(void) const { return mPrioritizedRouteCostThreshold; }
+
+    /**
+     * Sets the prioritized route cost threshold.
+     *
+     * @param[in]  aThreshold  The prioritized route cost threshold value.
+     */
+    void SetPrioritizedRouteCostThreshold(uint8_t aThreshold) { mPrioritizedRouteCostThreshold = aThreshold; }
+
+    /**
+     * Determines the vendor next hop and path cost towards an RLOC16 destination.
+     *
+     * @param[in]  aDestRloc16      The RLOC16 of the destination.
+     * @param[out] aNextHopRloc16   A reference to return the RLOC16 of next hop if known, or `Mle::kInvalidRloc16`.
+     * @param[out] aPathCost        A reference to return the path cost.
+     */
+    void GetPrioritizedNextHopAndPathCost(uint16_t aDestRloc16, uint16_t &aNextHopRloc16, uint8_t &aPathCost) const;
+
+    /**
+     * Fills a Route TLV for prioritized routes.
+     *
+     * When @p aNeighbor is not `nullptr`, we limit the number of router entries to `kMaxRoutersInRouteTlvForLinkAccept`
+     * when populating `aRouteTlv`, so that the TLV can be appended in a Link Accept message. In this case, we ensure
+     * to include router entries associated with @p aNeighbor, leader, and this device itself.
+     *
+     * @param[out] aRouteTlv    A Route TLV to be filled for prioritized routes
+     * @param[in]  aNeighbor    A pointer to the receiver (in case TLV is for a Link Accept message).
+     */
+    void FillPrioritizedRouteTlv(Mle::RouteTlv &aRouteTlv, const Neighbor *aNeighbor = nullptr) const;
+
+    /**
+     * Updates the routes based on a received `RouteTlv` from a neighboring router received via Vendor advertisement
+     *
+     * @param[in]  aRouteTlv    The received `RouteTlv`
+     * @param[in]  aNeighborId  The router ID of neighboring router from which @p aRouteTlv is received.
+     */
+    void UpdatePrioritizedRoutes(const Mle::RouteTlv &aRouteTlv, uint8_t aNeighborId);
+
+    /**
+     * Updates the prioritized Router ID allocation set.
+     *
+     * @param[in]  aRouterIdSequence  The Router ID Sequence.
+     * @param[in]  aRouterIdSet       The prioritized Router ID Set.
+     */
+    void UpdatePrioritizedRouterIdSet(uint8_t aRouterIdSequence, const Mle::RouterIdSet &aRouterIdSet);
+
+    /**
+     * Returns the minimum mesh path cost to the given RLOC16
+     *
+     * @param[in]  aDestRloc16  The RLOC16 of destination
+     *
+     * @returns The minimum mesh path cost to @p aDestRloc16 (via direct link or forwarding).
+     */
+    uint8_t GetPrioritizedPathCost(uint16_t aDestRloc16) const;
+
+    /**
+     * Returns the mesh path cost to leader via prioritized router
+     *
+     * @returns The path cost to leader via prioritized router
+     */
+    uint8_t GetPrioritizedPathCostToLeader(void) const;
+
+    /**
+     * Determines the next hop towards an RLOC16 destination via prioritized router
+     *
+     * @param[in]  aDestRloc16  The RLOC16 of the destination.
+     *
+     * @returns A RLOC16 of the next hop if a route is known, `Mle::kInvalidRloc16` otherwise.
+     */
+    uint16_t GetPrioritizedNextHop(uint16_t aDestRloc16) const;
+
+    /**
+     * Finds the router that is the next hop of a given router (via prioritized router)
+     *
+     * @param[in]  aRouter  The router to find next hop of.
+     *
+     * @returns A pointer to the router or `nullptr` if the router could not be found.
+     */
+    Router *FindPrioritizedNextHopOf(const Router &aRouter)
+    {
+        return AsNonConst(AsConst(this)->FindPrioritizedNextHopOf(aRouter));
+    }
+
+    /**
+     * Finds the router that is the next hop of a given router via prioritized router
+     *
+     * @param[in]  aRouter  The router to find next hop of.
+     *
+     * @returns A pointer to the router or `nullptr` if the router could not be found.
+     */
+    const Router *FindPrioritizedNextHopOf(const Router &aRouter) const;
+
+    /**
+     * Logs the prioritized route table.
+     */
+    void LogPrioritizedRouteTable(void) const;
+    
+    /**
+     * Determines if a router is a prioritized router.
+     *
+     * @param[in] router  The router to check.
+     *
+     * @returns TRUE if the router is a prioritized router, FALSE otherwise.
+     */
+    bool IsPrioritizedRouter(const Router& router) const;
+
+    /**
+     * Determines whether the Router ID Sequence in a received Route TLV is same as the current
+     * Router ID Sequence being used by `RouterTable`.
+     *
+     * @param[in] aRouteTlv   The Route TLV to compare.
+     *
+     * @retval TRUE    The Router ID Sequence in @p aRouteTlv is same.
+     * @retval FALSE   The Router ID Sequence in @p aRouteTlv is not the same.
+     */
+    bool IsRouteTlvIdSequenceSame(const Mle::RouteTlv &aRouteTlv) const;
+
+    /**
+     * Gets the prioritized router ID set.
+     *
+     * @param[out]  aRouterIdSet   A reference to output the prioritized router ID set.
+     */
+    void GetAsPrioritizedRouterIdSet(Mle::RouterIdSet &aRouterIdSet) const;
+#endif
+
     // The following methods are intended to support range-based `for`
     // loop iteration over the router and should not be used
     // directly.
@@ -467,6 +612,10 @@ private:
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
     uint8_t mMinRouterId;
     uint8_t mMaxRouterId;
+#endif
+#if PRIORITIZED_ROUTING_ENABLE
+    bool    mIsPrioritizedRoutingEnabled;
+    uint8_t mPrioritizedRouteCostThreshold;
 #endif
 };
 

@@ -1,0 +1,28 @@
+project_name: ot-tcp-lib
+label: Certification Libraries - TCP
+package: openthread
+description: >
+  This is a project to generate makefiles for producing TCP certification libraries.
+category: OpenThread Library|Internal
+quality: internal
+
+component:
+  - id: ot_stack_tcp
+    vendor: silabs
+
+tag:
+  - hwfilter:device:device_supports_thread
+  - toolchain:gcc
+
+# Following adds the compiler and linker flags to create the GCC LTO enabled libs.
+# The application linking to these libs can use toolchain_gcc_lto component to
+# get the optimized build.
+toolchain_settings:
+  - option: gcc_compiler_option
+    value: -flto=auto
+  - option: gcc_compiler_option
+    value: -ffat-lto-objects
+  - option: gcc_compiler_option
+    value: -fno-inline-small-functions
+  - option: gcc_compiler_option
+    value: -fno-strict-aliasing
