@@ -343,27 +343,29 @@ otError otThreadDirectSetRamOverride(otInstance *aInstance, const otThreadDirect
 otError otThreadDirectGetLocalSca(otInstance *aInstance, otThreadDirectLocalSca *aLocalSca);
 
 /**
- * Returns the SLW link inactivity timeout in seconds.
+ * Returns the local Thread Direct link supervision interval, in milliseconds.
  *
- * The timeout is the number of seconds without receiving a unicast frame from
- * a WI peer before the stack tears down the TD link and stops the SLW schedule.
- * 0 means the timeout has not been explicitly set and the default from
- * OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT applies.
+ * This is the interval this device advertises to a peer in the TD Link Command. The
+ * link's effective supervision interval is the minimum of the two peers' advertised
+ * values, unless one side is 0 (no requirement), in which case the other side's value
+ * applies. When a link is idle for the effective interval, the stack sends a
+ * supervision probe; after `kMaxSupervisionFailures` consecutive un-acked probes, the
+ * link is unlinked. Defaults to OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT.
  *
  * @param[in] aInstance  The OpenThread instance.
  *
- * @returns The current SLW timeout in seconds.
+ * @returns The current local supervision interval, in milliseconds.
  */
 uint32_t otThreadDirectGetSlwTimeout(otInstance *aInstance);
 
 /**
- * Sets the SLW link inactivity timeout in seconds.
+ * Sets the local Thread Direct link supervision interval, in milliseconds.
  *
  * @param[in] aInstance  The OpenThread instance.
- * @param[in] aTimeout   Timeout in seconds.  0 restores the compile-time
- *                       default (OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT).
+ * @param[in] aTimeout   Interval in milliseconds. 0 imposes no local requirement,
+ *                       deferring entirely to the peer's advertised interval.
  *
- * @retval OT_ERROR_NONE          Timeout updated.
+ * @retval OT_ERROR_NONE          Interval updated.
  * @retval OT_ERROR_INVALID_ARGS  @p aTimeout exceeds
  *                                OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT.
  */

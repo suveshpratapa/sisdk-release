@@ -328,6 +328,12 @@ void TestTdTxSchedulerRetryKeepsQueuedOrder(void)
     SuccessOrQuit(otThreadDirectSetSlwSchedule(&wi.GetInstance(), kSlwPeriodSlots));
     SuccessOrQuit(otThreadDirectSetSlwSchedule(&wl.GetInstance(), kSlwPeriodSlots));
 
+    // This test exercises `ThreadDirectTxScheduler`'s own data-retry recovery across a
+    // deliberately long radio outage; disable link supervision on both sides so it does not
+    // independently declare link loss and unlink mid-outage.
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&wi.GetInstance(), 0));
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&wl.GetInstance(), 0));
+
     SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
     SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
 

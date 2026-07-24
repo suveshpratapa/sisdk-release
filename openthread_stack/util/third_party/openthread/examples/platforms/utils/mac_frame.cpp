@@ -399,6 +399,41 @@ void otMacFrameSetThreadDirectScaLtv(otRadioFrame *aFrame,
         IgnoreError(iter.Advance());
     }
 }
+
+bool otMacFrameHasThreadDirectScaLtv(const otRadioFrame *aFrame)
+{
+    using namespace ot;
+    using namespace ot::Mac;
+
+    assert(aFrame != nullptr);
+
+    const Frame   &frame    = *static_cast<const Frame *>(aFrame);
+    const uint8_t *threadIe = frame.GetHeaderIe(ThreadHeaderIe::kElementId);
+    bool           found    = false;
+
+    if (threadIe == nullptr)
+    {
+        return false;
+    }
+
+    uint8_t ieLen = reinterpret_cast<const HeaderIe *>(threadIe)->GetLength();
+
+    PackedLtvStream::Iterator iter;
+    iter.Init(threadIe + sizeof(HeaderIe), ieLen);
+
+    while (!iter.IsDone())
+    {
+        if (iter.GetType() == ThreadHeaderIe::kTypeSca && iter.GetLength() >= 6)
+        {
+            found = true;
+            break;
+        }
+
+        IgnoreError(iter.Advance());
+    }
+
+    return found;
+}
 #endif // (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || WAKE_LISTENER_ENABLE) && (OPENTHREAD_FTD ||
        // OPENTHREAD_MTD)
 
@@ -626,6 +661,8 @@ bool otMacFrameIsTdWakeCommand(otRadioFrame *aFrame)
            (keyId >= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MIN && keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX);
 }
 
+#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
+
 uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8_t *aDest, uint8_t aDestLen)
 {
     using namespace ot;
@@ -694,6 +731,3 @@ uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8
 
     return written;
 }
-
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE && OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-       // && (OPENTHREAD_FTD || OPENTHREAD_MTD)

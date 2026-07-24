@@ -588,6 +588,17 @@ public:
      * @returns Phase in slots from @p aRefTimeUs to the next SLW window, or 0 if SLW is not running.
      */
     uint16_t ComputeSlwPhaseSlotsAt(uint32_t aRefTimeUs, uint32_t aSlotDurationUs) const;
+
+    /**
+     * Refreshes the TD SLW drift anchor from a validated exchange with a linked peer.
+     *
+     * Called after an Enh-ACK receipt or a successfully processed incoming frame, once the
+     * sender has been confirmed as a valid `DirectPeer`. Only the anchor timestamp moves;
+     * the periodic sample time set by `UpdateThreadDirectSlw()` is unaffected.
+     *
+     * @param[in] aFrame  The received frame (Enh-ACK or incoming frame).
+     */
+    void UpdateThreadDirectSlwSyncTimestamp(const RxFrame &aFrame);
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE

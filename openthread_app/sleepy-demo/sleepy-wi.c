@@ -59,6 +59,7 @@
 #endif
 
 #define TD_SLW_PERIOD_SLOT 64 // 40000 us (unit of slot duration 625 us).
+#define TD_SLW_TIMEOUT_MS 200 // Supervision interval, in milliseconds.
 
 static bool sAllowSleep         = false;
 static bool sSleepTogglePressed = false;
@@ -77,13 +78,45 @@ static void handleDirectEvent(otThreadDirectEvent aEvent, const otThreadDirectPe
     switch (aEvent)
     {
     case OT_THREAD_DIRECT_EVENT_LINKED:
-        otCliOutputFormat("Linked\r\n");
+        if (aPeerInfo != NULL)
+        {
+            const otExtAddress *a = &aPeerInfo->mExtAddress;
+            otCliOutputFormat("TD link established with %02X%02X%02X%02X%02X%02X%02X%02X\r\n",
+                              a->m8[0],
+                              a->m8[1],
+                              a->m8[2],
+                              a->m8[3],
+                              a->m8[4],
+                              a->m8[5],
+                              a->m8[6],
+                              a->m8[7]);
+        }
+        else
+        {
+            otCliOutputFormat("TD link established\r\n");
+        }
         break;
     case OT_THREAD_DIRECT_EVENT_LINK_FAILED:
-        otCliOutputFormat("Failed\r\n");
+        otCliOutputFormat("TD link failed to establish\r\n");
         break;
     case OT_THREAD_DIRECT_EVENT_UNLINKED:
-        otCliOutputFormat("Unlinked\r\n");
+        if (aPeerInfo != NULL)
+        {
+            const otExtAddress *a = &aPeerInfo->mExtAddress;
+            otCliOutputFormat("TD link unlinked with %02X%02X%02X%02X%02X%02X%02X%02X\r\n",
+                              a->m8[0],
+                              a->m8[1],
+                              a->m8[2],
+                              a->m8[3],
+                              a->m8[4],
+                              a->m8[5],
+                              a->m8[6],
+                              a->m8[7]);
+        }
+        else
+        {
+            otCliOutputFormat("TD link unlinked\r\n");
+        }
         break;
     default:
         break;
@@ -104,6 +137,7 @@ void sleepyInit(void)
     otCliOutputFormat("   direct link state\r\n");
 
     SuccessOrExit(error = otThreadDirectSetSlwSchedule(otInstanceGetSingle(), TD_SLW_PERIOD_SLOT));
+    SuccessOrExit(error = otThreadDirectSetSlwTimeout(otInstanceGetSingle(), TD_SLW_TIMEOUT_MS));
 
     // Set link mode: rx-off-when-idle sleepy end device.
     config.mRxOnWhenIdle = 0;

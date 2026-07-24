@@ -247,6 +247,16 @@ public:
      */
     bool IsThreadDirectLinkCommand(void) const;
 
+    /**
+     * Indicates whether this frame is a Thread Direct link supervision probe.
+     *
+     * A supervision probe is a 2015 Data frame with the Ack Request bit set and a
+     * zero-length MAC payload (no bytes between the header IEs and the MIC/FCS).
+     *
+     * @returns TRUE if the frame is a TD link supervision probe, FALSE otherwise.
+     */
+    bool IsThreadDirectSupervision(void) const;
+
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
     /**
@@ -1088,7 +1098,13 @@ public:
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
         bool mAppendCslIe : 1; ///< Whether to append CSL IE.
 #endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+        bool mAppendThreadHeaderIe : 1; ///< Whether to append the Thread Header IE (SCA LTV).
+#endif
         bool mEmptyPayload : 1; ///< Whether payload is empty (to decide about appending Termination2 IE).
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+        const ScaParams *mScaParams; ///< SCA parameters to encode when `mAppendThreadHeaderIe` is set.
+#endif
 #endif
     };
 
@@ -1380,6 +1396,26 @@ public:
     Error GenerateThreadDirectTeardown(PanId             aPanId,
                                        const ExtAddress &aDstExtAddress,
                                        const ExtAddress &aSrcExtAddress);
+
+    /**
+     * Generates a Thread Direct link supervision probe in this object.
+     *
+     * The probe is a Data frame with a zero-length MAC payload and the Ack Request bit
+     * set, carrying a fresh SCA LTV in the Thread Header IE.  Security uses the peer's
+     * wake key.
+     *
+     * @param[in] aPanId           Destination PAN ID.
+     * @param[in] aDstExtAddress   Peer extended address.
+     * @param[in] aSrcExtAddress   Own extended address.
+     * @param[in] aScaParams       Local SCA parameters to encode in the SCA LTV.
+     *
+     * @retval kErrorNone    Frame built successfully.
+     * @retval kErrorNoBufs  Frame buffer too small.
+     */
+    Error GenerateThreadDirectSupervision(PanId             aPanId,
+                                          const ExtAddress &aDstExtAddress,
+                                          const ExtAddress &aSrcExtAddress,
+                                          const ScaParams  &aScaParams);
 
     /**
      * Patches the SLW phase field of the SCA LTV in the Thread Header IE of this frame.

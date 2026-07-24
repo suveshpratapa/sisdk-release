@@ -64,21 +64,25 @@ public:
         Mac::ScaParams sca = Mac::ScaParams();
 
         Neighbor::Init(aInstance);
-        mTearDownCount         = 0;
-        mWakeKeyUsed           = false;
-        mCoexEnabled           = false;
-        mHasScaSchedule        = false;
-        mWakeKeyIndex          = 0;
-        mSlwPeriodSlots        = 0;
-        mSlwPhaseSlots         = 0;
-        mSupervisionIntervalMs = 0;
-        mServicesBitmap        = 0;
-        mLastWakeFrameCounter  = 0;
-        sca.mSlotDuration      = Mac::ScaSlotDuration::k625Usec;
-        sca.mRamAvailable      = false;
+        mTearDownCount            = 0;
+        mWakeKeyUsed              = false;
+        mCoexEnabled              = false;
+        mHasScaSchedule           = false;
+        mWakeKeyIndex             = 0;
+        mSlwPeriodSlots           = 0;
+        mSlwPhaseSlots            = 0;
+        mSupervisionIntervalMs    = 0;
+        mServicesBitmap           = 0;
+        mLastWakeFrameCounter     = 0;
+        mSupervisionProbeAttempts = 0;
+        mSupervisionProbePending  = false;
+        sca.mSlotDuration         = Mac::ScaSlotDuration::k625Usec;
+        sca.mRamAvailable         = false;
         SetSca(sca);
         mSlwAccuracy.Init();
-        mLastScaRxTimestamp = 0;
+        mLastScaRxTimestamp       = 0;
+        mLastActivityTime         = TimerMilli::GetNow();
+        mLastSupervisionProbeTime = TimerMilli::GetNow();
     }
 
     /**
@@ -227,18 +231,80 @@ public:
     uint32_t GetLastWakeFrameCounter(void) const { return mLastWakeFrameCounter; }
     void     SetLastWakeFrameCounter(uint32_t aCounter) { mLastWakeFrameCounter = aCounter; }
 
+    /**
+     * Gets the time of the last successful TX or RX exchange with this peer.
+     *
+     * @returns The time of the last successful exchange.
+     */
+    TimeMilli GetLastActivityTime(void) const { return mLastActivityTime; }
+
+    /**
+     * Sets the time of the last successful TX or RX exchange with this peer.
+     *
+     * @param[in] aTime  The time of the exchange.
+     */
+    void SetLastActivityTime(TimeMilli aTime) { mLastActivityTime = aTime; }
+
+    /**
+     * Gets the count of consecutive un-acked link supervision probes sent to this peer.
+     *
+     * @returns The consecutive un-acked probe count.
+     */
+    uint8_t GetSupervisionProbeAttempts(void) const { return mSupervisionProbeAttempts; }
+
+    /**
+     * Increments the count of consecutive un-acked link supervision probes.
+     */
+    void IncrementSupervisionProbeAttempts(void) { mSupervisionProbeAttempts++; }
+
+    /**
+     * Resets the count of consecutive un-acked link supervision probes to zero.
+     */
+    void ResetSupervisionProbeAttempts(void) { mSupervisionProbeAttempts = 0; }
+
+    /**
+     * Indicates whether a link supervision probe to this peer is in flight.
+     *
+     * @retval TRUE   A supervision probe is in flight.
+     * @retval FALSE  No supervision probe is in flight.
+     */
+    bool IsSupervisionProbePending(void) const { return mSupervisionProbePending; }
+
+    /**
+     * Sets whether a link supervision probe to this peer is in flight.
+     *
+     * @param[in] aPending  Whether a supervision probe is in flight.
+     */
+    void SetSupervisionProbePending(bool aPending) { mSupervisionProbePending = aPending; }
+
+    /**
+     * Gets the time the most recent link supervision probe to this peer completed.
+     *
+     * @returns The time of the most recent probe completion.
+     */
+    TimeMilli GetLastSupervisionProbeTime(void) const { return mLastSupervisionProbeTime; }
+
+    /**
+     * Sets the time the most recent link supervision probe to this peer completed.
+     *
+     * @param[in] aTime  The time the probe completed.
+     */
+    void SetLastSupervisionProbeTime(TimeMilli aTime) { mLastSupervisionProbeTime = aTime; }
+
 private:
     uint16_t
         mSlwPeriodSlots; ///< SLW period in units of advertised Slot Duration (0 = clear schedule / rx-on-when-idle).
-    uint16_t mSlwPhaseSlots;         ///< SLW phase in slot-duration units.
-    uint32_t mLastWakeFrameCounter;  ///< Last accepted wake frame counter (replay protection).
-    uint16_t mSupervisionIntervalMs; ///< Supervision interval from TD Link Command.
-    uint8_t  mServicesBitmap;        ///< Services bitmap from TD Link Command (bit 0 = peer has SRP server).
-    uint8_t  mWakeKeyIndex;          ///< Key index that secured this link (129 or 130-192).
-    uint8_t  mTearDownCount : 3;     ///< Retransmitted teardown frame count.
-    bool     mWakeKeyUsed : 1;       ///< True if a wake key secured the link.
-    bool     mCoexEnabled : 1;       ///< True if the peer reported CoEx constraints (RAM Duration > 1).
-    bool     mHasScaSchedule : 1;    ///< True after a valid SCA LTV has been received and applied.
+    uint16_t mSlwPhaseSlots;                ///< SLW phase in slot-duration units.
+    uint32_t mLastWakeFrameCounter;         ///< Last accepted wake frame counter (replay protection).
+    uint16_t mSupervisionIntervalMs;        ///< Supervision interval from TD Link Command.
+    uint8_t  mServicesBitmap;               ///< Services bitmap from TD Link Command (bit 0 = peer has SRP server).
+    uint8_t  mWakeKeyIndex;                 ///< Key index that secured this link (129 or 130-192).
+    uint8_t  mTearDownCount : 3;            ///< Retransmitted teardown frame count.
+    uint8_t  mSupervisionProbeAttempts : 3; ///< Consecutive un-acked link supervision probe attempts.
+    bool     mWakeKeyUsed : 1;              ///< True if a wake key secured the link.
+    bool     mCoexEnabled : 1;              ///< True if the peer reported CoEx constraints (RAM Duration > 1).
+    bool     mHasScaSchedule : 1;           ///< True after a valid SCA LTV has been received and applied.
+    bool     mSupervisionProbePending : 1;  ///< True while a link supervision probe TX is in flight.
 
     Mac::ScaParams   mSca;
     Mac::CslAccuracy mSlwAccuracy;
@@ -246,6 +312,8 @@ private:
     uint64_t         mSlwPeriodUs;
     uint64_t         mSlwPhaseUs;
     uint64_t         mLastScaRxTimestamp;
+    TimeMilli        mLastActivityTime;         ///< Time of the last successful TX or RX exchange with this peer.
+    TimeMilli        mLastSupervisionProbeTime; ///< Time the most recent supervision probe to this peer completed.
 };
 
 } // namespace ot

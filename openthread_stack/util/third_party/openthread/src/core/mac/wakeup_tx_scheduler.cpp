@@ -34,7 +34,7 @@
 #include "common/log.hpp"
 #include "common/num_utils.hpp"
 #include "common/time.hpp"
-#include "core/instance/instance.hpp"
+#include "instance/instance.hpp"
 #include "mac/sub_mac.hpp"
 #include "radio/radio.hpp"
 

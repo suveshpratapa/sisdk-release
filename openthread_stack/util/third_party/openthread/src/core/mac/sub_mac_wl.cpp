@@ -322,6 +322,20 @@ void SubMac::LogThreadDirectSlwWindow(uint32_t aWinStart, uint32_t aWinDuration)
 #else
 void SubMac::LogThreadDirectSlwWindow(uint32_t, uint32_t) const {}
 #endif
+
+void SubMac::UpdateThreadDirectSlwSyncTimestamp(const RxFrame &aFrame)
+{
+    VerifyOrExit(mIsThreadDirectSlwEnabled && (mThreadDirectSlwPeriod > 0));
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE && OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
+    mThreadDirectSlwLastSync = TimerMicro::GetNow();
+#else
+    mThreadDirectSlwLastSync = TimeMicro(static_cast<uint32_t>(aFrame.mInfo.mRxInfo.mTimestamp));
+#endif
+
+exit:
+    return;
+}
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
@@ -372,11 +386,24 @@ void SubMac::HandleWlTimer(void)
 
 void SubMac::HandleWlReceiveAt(void)
 {
+    uint32_t nowRadio = static_cast<uint32_t>(Get<Radio>().GetNow());
+
     mWlSampleTime += mWakeupListenInterval;
     mWlSampleTimeRadio += mWakeupListenInterval;
+
+    // A late callback (say an RTOS scheduling delay on the OpenThread task) can leave a single
+    // interval step at or behind the radio's current time.
+    // Keep advancing until the sample point is strictly ahead of the radio clock, matching the
+    // resync loop already used for the post-link SLW schedule (StartThreadDirectSlwAtSampleTime).
+    while (static_cast<int32_t>(mWlSampleTimeRadio - nowRadio) <= 0)
+    {
+        mWlSampleTime += mWakeupListenInterval;
+        mWlSampleTimeRadio += mWakeupListenInterval;
+    }
+
     mWlTimer.FireAt(mWlSampleTime + mWakeupListenDuration + kWlReceiveTimeAfter);
 
-    if ((mState != kStateDisabled)) // && (mState != kStateTransmit))
+    if (mState != kStateDisabled)
     {
         IgnoreError(
             Get<Radio>().ReceiveAt(mWakeupChannel, static_cast<uint32_t>(mWlSampleTimeRadio), mWakeupListenDuration));

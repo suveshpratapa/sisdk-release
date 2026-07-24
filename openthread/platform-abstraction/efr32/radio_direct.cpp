@@ -79,7 +79,6 @@ void otPlatRadioSetWakeKey(otInstance *aInstance, uint8_t aKeyIndex, const otMac
 
 // Called from the time-critical RAIL data-request callback within the
 // 192 us IEEE 802.15.4 ACK turnaround window.
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
                                                      otRadioFrame *aReceivedFrame,
                                                      uint8_t      *aIeData,
@@ -88,8 +87,6 @@ uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
     OT_UNUSED_VARIABLE(aInstance);
     return otMacFrameGenerateThreadDirectEnhAckIe(aReceivedFrame, aIeData, aAvailable);
 }
-
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 
 otError otPlatRadioSetThreadDirectSlwSchedule(otInstance *aInstance, uint16_t aSlwPeriod, uint32_t aSlotDurationUs)
 {

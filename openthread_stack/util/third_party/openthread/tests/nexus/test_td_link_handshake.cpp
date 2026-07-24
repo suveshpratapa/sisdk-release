@@ -52,6 +52,7 @@ static constexpr uint16_t kPanId                           = 0xD001;
 struct TdEventInfo
 {
     uint32_t            mLinkedCount;
+    uint32_t            mLinkFailedCount;
     uint32_t            mUnlinkedCount;
     uint32_t            mWakeReceivedCount;
     otThreadDirectEvent mLastEvent;
@@ -74,6 +75,9 @@ static void HandleTdEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerIn
     case OT_THREAD_DIRECT_EVENT_LINKED:
         info->mLinkedCount++;
         break;
+    case OT_THREAD_DIRECT_EVENT_LINK_FAILED:
+        info->mLinkFailedCount++;
+        break;
     case OT_THREAD_DIRECT_EVENT_UNLINKED:
         info->mUnlinkedCount++;
         break;
@@ -83,6 +87,14 @@ static void HandleTdEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerIn
     default:
         break;
     }
+}
+
+static void StartWakeBurst(Node &aWi, Node &aWl)
+{
+    const otExtAddress &wlAddr = *reinterpret_cast<const otExtAddress *>(&aWl.mRadio.mExtAddress);
+
+    SuccessOrQuit(otThreadDirectWakeup(&aWi.GetInstance(), &wlAddr, OT_THREAD_DIRECT_WAKE_TYPE_LINK, 0, 0, 0));
+    VerifyOrQuit(otThreadDirectIsWakeBurstActive(&aWi.GetInstance()));
 }
 
 void TestTdLinkHandshake(void)
@@ -288,6 +300,175 @@ void TestTdLinkHandshakeGuestKey(void)
 
     VerifyOrQuit(wiEvents.mUnlinkedCount == 1);
     VerifyOrQuit(wlEvents.mUnlinkedCount == 1);
+}
+
+void TestTdLinkHandshakeLinksOnlyAfterWiFollowUp(void)
+{
+    static constexpr uint16_t kLongSlwPeriodSlots = 2000;
+    static constexpr uint32_t kPreFollowUpCheckMs = 200;
+    static constexpr uint32_t kPollStepMs         = 100;
+    static constexpr uint32_t kHandshakeLimitMs   = 10 * 1000;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo            wiEvents;
+    TdEventInfo            wlEvents;
+    otThreadDirectPeerInfo peerInfo;
+    const otExtAddress    &wiAddr = *reinterpret_cast<const otExtAddress *>(&wi.mRadio.mExtAddress);
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-follow-up");
+    wl.SetName("WL-follow-up");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("FollowUp Step 1: Configure both nodes with a shared network key and a long SLW period");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&wi.GetInstance(), kLongSlwPeriodSlots));
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&wl.GetInstance(), kLongSlwPeriodSlots));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("FollowUp Step 2: Register TD event callbacks, enable WL wake listen, and start wake burst");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("FollowUp Step 3: Verify WL is not linked before WI's scheduled follow-up TD Link Command");
+
+    nexus.AdvanceTime(kPreFollowUpCheckMs);
+
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+    VerifyOrQuit(wiEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+    VerifyOrQuit(otThreadDirectGetPeerInfo(&wl.GetInstance(), &wiAddr, &peerInfo) == OT_ERROR_NOT_FOUND);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("FollowUp Step 4: Advance until both sides report LINKED");
+
+    for (uint32_t waited = 0; waited < kHandshakeLimitMs; waited += kPollStepMs)
+    {
+        nexus.AdvanceTime(kPollStepMs);
+
+        if ((wiEvents.mLinkedCount == 1) && (wlEvents.mLinkedCount == 1))
+        {
+            break;
+        }
+    }
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkedCount == 1);
+    SuccessOrQuit(otThreadDirectGetPeerInfo(&wl.GetInstance(), &wiAddr, &peerInfo));
+}
+
+void TestTdLinkHandshakeWlTimeoutResumesListening(void)
+{
+    static constexpr uint16_t kLongSlwPeriodSlots = 2000;
+    static constexpr uint32_t kPreFollowUpCheckMs = 200;
+    static constexpr uint32_t kTimeoutWaitMs      = 8 * 1000;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo            wiEvents;
+    TdEventInfo            wlEvents;
+    otThreadDirectPeerInfo peerInfo;
+    const otExtAddress    &wiAddr = *reinterpret_cast<const otExtAddress *>(&wi.mRadio.mExtAddress);
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-timeout");
+    wl.SetName("WL-timeout");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Timeout Step 1: Configure both nodes with a shared network key and a long SLW period");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&wi.GetInstance(), kLongSlwPeriodSlots));
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&wl.GetInstance(), kLongSlwPeriodSlots));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Timeout Step 2: Register TD event callbacks, enable WL wake listen, and start wake burst");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Timeout Step 3: Enable WL radio filter after wake reception to drop WI's follow-up TD Link Command");
+
+    nexus.AdvanceTime(kPreFollowUpCheckMs);
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+
+    wl.Get<Mac::Mac>().SetRadioFilterEnabled(true);
+    VerifyOrQuit(wl.Get<Mac::Mac>().IsRadioFilterEnabled());
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Timeout Step 4: Advance through WI link failure and WL timeout recovery");
+
+    nexus.AdvanceTime(kTimeoutWaitMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+    VerifyOrQuit(wiEvents.mLinkFailedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+    VerifyOrQuit(otThreadDirectGetPeerInfo(&wl.GetInstance(), &wiAddr, &peerInfo) == OT_ERROR_NOT_FOUND);
+
+    wl.Get<Mac::Mac>().SetRadioFilterEnabled(false);
 }
 
 struct UdpRxInfo
@@ -847,6 +1028,8 @@ int main(void)
     setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_DEFAULT") ? getenv("OT_NEXUS_PCAP_FILE_DEFAULT") : ""),
            /*overwrite=*/1);
     ot::Nexus::TestTdLinkHandshake();
+    ot::Nexus::TestTdLinkHandshakeLinksOnlyAfterWiFollowUp();
+    ot::Nexus::TestTdLinkHandshakeWlTimeoutResumesListening();
 
     setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_GUEST") ? getenv("OT_NEXUS_PCAP_FILE_GUEST") : ""),
            /*overwrite=*/1);

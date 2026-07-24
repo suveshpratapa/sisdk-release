@@ -401,7 +401,8 @@ void SubMac::ProcessTransmitSecurity(void)
     SuccessOrExit(mTransmitFrame.GetKeyIdMode(keyIdMode));
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    if (mTransmitFrame.IsTdWakeCommand() || mTransmitFrame.IsThreadDirectLinkCommand())
+    if (mTransmitFrame.IsTdWakeCommand() || mTransmitFrame.IsThreadDirectLinkCommand() ||
+        mTransmitFrame.IsThreadDirectSupervision())
     {
         keyId = mActiveBurstWakeKeyIndex;
 

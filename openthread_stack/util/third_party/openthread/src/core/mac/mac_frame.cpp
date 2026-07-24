@@ -187,6 +187,9 @@ void TxFrame::Info::PrepareHeadersIn(TxFrame &aTxFrame) const
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     fcf |= (mAppendCslIe ? kFcfIePresent : 0);
 #endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    fcf |= (mAppendThreadHeaderIe ? kFcfIePresent : 0);
+#endif
 #endif
 
     builder.Init(aTxFrame.mPsdu, aTxFrame.GetMtu());
@@ -239,6 +242,23 @@ void TxFrame::Info::PrepareHeadersIn(TxFrame &aTxFrame) const
         builder.Append<HeaderIe>()->Init(CslIe::kHeaderIeId, sizeof(CslIe));
         builder.Append<CslIe>();
         aTxFrame.SetCslIePresent(true);
+    }
+#endif
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    if (mAppendThreadHeaderIe && (mScaParams != nullptr))
+    {
+        uint8_t      scaPlain[48];
+        uint8_t      scaPacked[48];
+        uint8_t      scaPackedLen;
+        FrameBuilder scaBuilder;
+
+        scaBuilder.Init(scaPlain, sizeof(scaPlain));
+        IgnoreError(AppendScaLtv(scaBuilder, *mScaParams));
+        scaPackedLen = PackedLtvStream::Encode(scaPlain, static_cast<uint8_t>(scaBuilder.GetLength()), scaPacked,
+                                               sizeof(scaPacked));
+
+        IgnoreError(AppendThreadHeaderIe(builder, scaPacked, scaPackedLen));
     }
 #endif
 
@@ -365,6 +385,11 @@ bool Frame::IsThreadDirectLinkCommand(void) const
 
 exit:
     return isLink;
+}
+
+bool Frame::IsThreadDirectSupervision(void) const
+{
+    return (GetType() == kTypeData) && IsVersion2015() && GetAckRequest() && (GetPayloadLength() == 0);
 }
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
@@ -1733,6 +1758,64 @@ Error TxFrame::GenerateThreadDirectTeardown(PanId             aPanId,
     IgnoreError(builder.AppendUint8(kMacCmdDirect));
     IgnoreError(builder.AppendUint8(kThreadMacCmdDirectLink));
     IgnoreError(builder.AppendUint8(0)); // Link Parameter Mask (no optional fields)
+
+    builder.AppendLength(CalculateMicSize(secCtl) + GetFcsSize());
+
+    mLength = builder.GetLength();
+
+exit:
+    return error;
+}
+
+Error TxFrame::GenerateThreadDirectSupervision(PanId             aPanId,
+                                               const ExtAddress &aDstExtAddress,
+                                               const ExtAddress &aSrcExtAddress,
+                                               const ScaParams  &aScaParams)
+{
+    Error        error;
+    uint16_t     fcf;
+    uint8_t      secCtl;
+    FrameBuilder builder;
+    Address      dst;
+    Address      src;
+
+    uint8_t      scaPlain[48];
+    uint8_t      scaPacked[48];
+    uint8_t      scaPackedLen;
+    FrameBuilder scaBuilder;
+
+    scaBuilder.Init(scaPlain, sizeof(scaPlain));
+    SuccessOrExit(error = AppendScaLtv(scaBuilder, aScaParams));
+    scaPackedLen =
+        PackedLtvStream::Encode(scaPlain, static_cast<uint8_t>(scaBuilder.GetLength()), scaPacked, sizeof(scaPacked));
+
+    dst.SetExtended(aDstExtAddress);
+    src.SetExtended(aSrcExtAddress);
+
+    // 2015 Data frame: extended dst+src, Dest PAN ID present, security enabled,
+    // IE present, ACK requested, zero-length MAC payload.
+    fcf = kTypeData | kVersion2015 | kFcfSecurityEnabled | kFcfIePresent | kFcfAckRequest;
+    fcf |= DetermineFcfAddrType(dst, kFcfDstAddrShift);
+    fcf |= DetermineFcfAddrType(src, kFcfSrcAddrShift);
+
+    ClearAllBytes(mInfo.mTxInfo);
+    builder.Init(mPsdu, GetMtu());
+
+    IgnoreError(builder.AppendLittleEndianUint16(fcf));
+    IgnoreError(builder.AppendUint8(0)); // Sequence number (filled by SubMac)
+    IgnoreError(builder.AppendLittleEndianUint16(aPanId));
+    IgnoreError(builder.AppendMacAddress(dst));
+    IgnoreError(builder.AppendMacAddress(src));
+
+    // Auxiliary Security Header: Enc-Mic-32, Key ID Mode 1 (wake key)
+    secCtl = kKeyIdMode1 | kSecurityEncMic32;
+    IgnoreError(builder.AppendUint8(secCtl));
+    builder.AppendLength(CalculateSecurityHeaderSize(secCtl) - sizeof(secCtl));
+
+    SuccessOrExit(error = AppendThreadHeaderIe(builder, scaPacked, scaPackedLen));
+
+    // No Payload IE Termination and no MAC payload: the Header IE list ends
+    // implicitly at the frame length (see `Frame::FindPayloadIndex`).
 
     builder.AppendLength(CalculateMicSize(secCtl) + GetFcsSize());
 

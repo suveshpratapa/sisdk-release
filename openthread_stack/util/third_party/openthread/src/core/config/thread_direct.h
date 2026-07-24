@@ -165,25 +165,39 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_THREAD_DIRECT_WL_PEER_TD_LINK_CMD_TIMEOUT_PERIODS
+ *
+ * Number of local SLW periods that a WL waits for the WI's follow-up TD Link Command
+ * after receiving the echoed challenge in the Enh-ACK.  A WL with no SLW schedule
+ * (rx-on-when-idle) waits `kMinWlPeerTdLinkCmdTimeoutMs` instead.
+ */
+#ifndef OPENTHREAD_CONFIG_THREAD_DIRECT_WL_PEER_TD_LINK_CMD_TIMEOUT_PERIODS
+#define OPENTHREAD_CONFIG_THREAD_DIRECT_WL_PEER_TD_LINK_CMD_TIMEOUT_PERIODS 2
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT
  *
- * Default SLW link inactivity timeout in seconds.
+ * Default Thread Direct link supervision interval, in milliseconds.
  *
- * After a TD link is established, if no unicast frame is received from the WI
- * peer within this many seconds the stack tears down the link and stops the
- * WL's SLW schedule.  Overridable at runtime via `otThreadDirectSetSlwTimeout()`.
+ * This is the interval this device advertises to a peer in the TD Link Command. The
+ * interval that governs a given link is the minimum of the two peers' advertised values.
+ * Overridable at runtime via `otThreadDirectSetSlwTimeout()`.
  */
 #ifndef OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT
-#define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT 100
+#define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT 1000
 #endif
 
 /**
  * @def OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT
  *
- * Maximum value accepted by `otThreadDirectSetSlwTimeout()`, in seconds.
+ * Maximum value accepted by `otThreadDirectSetSlwTimeout()`, in milliseconds.
+ *
+ * Matches the maximum representable value of the TD Link Command Supervision Interval
+ * field (`uint8` in 100 ms units).
  */
 #ifndef OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT
-#define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT 10000
+#define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT 25500
 #endif
 
 /**

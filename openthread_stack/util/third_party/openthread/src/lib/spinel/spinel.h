@@ -3414,10 +3414,11 @@ enum
     /// Thread Direct SLW Timeout
     /** Format: `L` - Read-write
      *
-     * The SLW link inactivity timeout in seconds.  After a Thread Direct link
-     * is established, if no unicast frame is received from the peer within this
-     * many seconds the stack tears down the link.  0 on write restores the
-     * compile-time default (OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT).
+     * The local Thread Direct link supervision interval, in milliseconds.  The link's
+     * effective supervision interval is the minimum of the two peers' advertised
+     * values, unless one side is 0 (no requirement), in which case the other side's
+     * value applies.  When a link is idle for the effective interval, the stack sends
+     * a supervision probe; repeated un-acked probes result in link loss.
      */
     SPINEL_PROP_THREAD_DIRECT_SLW_TIMEOUT = SPINEL_PROP_THREAD_EXT__BEGIN + 74,
 

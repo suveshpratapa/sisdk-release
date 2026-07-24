@@ -281,7 +281,7 @@ static bool isFilterMaskValid(uint8_t mask)
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+#if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
 static uint8_t sAckIeData[OT_ACK_IE_MAX_SIZE + SLI_OT_RADIO_DIRECT_ENH_ACK_IE_MAX_SIZE];
 #else
 static uint8_t sAckIeData[OT_ACK_IE_MAX_SIZE];
@@ -314,7 +314,7 @@ static uint8_t generateAckIeData(otInstance   *aInstance,
     }
 #endif
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+#if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
     {
         uint8_t available = (uint8_t)(sizeof(sAckIeData) - offset);
 
@@ -1604,14 +1604,15 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
                 ||
 #endif
 #if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
-                (otMacFrameIsTdLinkCommand(&sCurrentTxPacket->frame) && sli_ot_radio_direct_slw_is_present(aInstance))
+                (otMacFrameHasThreadDirectScaLtv(&sCurrentTxPacket->frame)
+                 && sli_ot_radio_direct_slw_is_present(aInstance))
 #endif
                     ))
         {
-            // Only called for CSL children (CSL period > 0)
-            // Note: Our SSEDs "schedule" transmissions to their parent in order to know
-            // exactly when in the future the data packets go out so they can calculate
-            // the accurate CSL phase to send to their parent.
+            // Only called for CSL children (CSL period > 0) or Thread Direct frames carrying
+            // an SCA LTV. Note: Our SSEDs "schedule" transmissions to their parent in order to
+            // know exactly when in the future the data packets go out so they can calculate
+            // the accurate CSL or SCA phase to send to their peer.
             sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime = sl_rail_get_time(SL_RAIL_EFR32_HANDLE);
             sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay =
                 SCHEDULE_TX_DELAY_US; // Chosen after internal certification testing
@@ -1704,7 +1705,7 @@ void updateIeInfoTxFrame(uint32_t shrTxTime)
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
-    if (otMacFrameIsTdLinkCommand(&sCurrentTxPacket->frame) && sli_ot_radio_direct_slw_is_present(instance))
+    if (otMacFrameHasThreadDirectScaLtv(&sCurrentTxPacket->frame) && sli_ot_radio_direct_slw_is_present(instance))
     {
         uint16_t slwPhase;
         int16_t  ramOffsetUs;
