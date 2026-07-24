@@ -94,6 +94,10 @@ static sli_ot_wake_guest_key_t sGuestWakeKeys[RADIO_INTERFACE_COUNT][OPENTHREAD_
 // External declarations
 extern otExtAddress sExtAddress[RADIO_EXT_ADDR_COUNT];
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+static void sli_ot_radio_security_store_wake_key_material(otMacKeyMaterial *aDest, const otMacKeyMaterial *aWakeKey);
+#endif
+
 extern "C" {
 
 void sli_ot_radio_security_init(void)
@@ -292,6 +296,12 @@ otError sli_ot_radio_security_process_transmit(otRadioFrame *aFrame, otInstance 
     volatile uint32_t *frameCounter  = nullptr;
     instanceIndex_t    instanceIndex = sli_ot_radio_instance_get_index(aInstance);
 
+    otLogInfoPlat("SecTx: secEnabled=%d, keyIdMode1=%d, secProcessed=%d, keyId=%u",
+        otMacFrameIsSecurityEnabled(aFrame),
+        otMacFrameIsKeyIdMode1(aFrame),
+        aFrame->mInfo.mTxInfo.mIsSecurityProcessed,
+        otMacFrameGetKeyId(aFrame));
+
     otEXPECT(otMacFrameIsSecurityEnabled(aFrame) && otMacFrameIsKeyIdMode1(aFrame)
              && !aFrame->mInfo.mTxInfo.mIsSecurityProcessed);
 
@@ -300,7 +310,17 @@ otError sli_ot_radio_security_process_transmit(otRadioFrame *aFrame, otInstance 
 
     if (keyId >= OT_MAC_FRAME_WAKE_KEY_INDEX)
     {
-        SuccessOrExit(error = sli_ot_radio_security_resolve_wake_transmit_key(instanceIndex, keyId, &keyMaterial));
+        error = sli_ot_radio_security_resolve_wake_transmit_key(instanceIndex, keyId, &keyMaterial);
+
+        if (error != OT_ERROR_NONE && aFrame->mInfo.mTxInfo.mAesKey != nullptr)
+        {
+            sli_ot_radio_security_store_wake_key_material(&sDefaultWakeKey[instanceIndex],
+                                                          aFrame->mInfo.mTxInfo.mAesKey);
+            keyMaterial = &sDefaultWakeKey[instanceIndex];
+            error       = OT_ERROR_NONE;
+        }
+
+        SuccessOrExit(error);
         frameCounter = &sMacKeys[instanceIndex].macFrameCounter;
     }
     else
@@ -593,6 +613,12 @@ void sli_ot_radio_security_set_wake_key(otInstance *aInstance, uint8_t aKeyIndex
         sli_ot_radio_security_set_guest_wake_key(index, aKeyIndex, aWakeKey);
     }
 
+    otLogInfoPlat("SetWakeKey: idx=%u, key[0..3]=%02x%02x%02x%02x",
+        aKeyIndex,
+        aWakeKey->mKeyMaterial.mKey.m8[0],
+        aWakeKey->mKeyMaterial.mKey.m8[1],
+        aWakeKey->mKeyMaterial.mKey.m8[2],
+        aWakeKey->mKeyMaterial.mKey.m8[3]);
 exit:
     return;
 }

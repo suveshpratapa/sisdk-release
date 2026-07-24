@@ -1031,7 +1031,7 @@ exit:
 Error SubMac::SetWakeKey(uint8_t aKeyIndex, const KeyMaterial *aWakeKey)
 {
     Error error = kErrorNone;
-
+    LogInfo("SetWakeKey: idx=%u, shouldPush=%u", aKeyIndex, !ShouldHandleTransmitSecurity());
     // Guest keys (130-192) are stored in KeyManager for RX decryption on FTD/MTD builds.
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
     if (aKeyIndex >= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MIN && aKeyIndex <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX)

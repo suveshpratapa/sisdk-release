@@ -512,6 +512,7 @@ void KeyManager::UpdateKeyMaterial(void)
     mWakeKeyValid = false; // Invalidate cached Wake Key whenever the Network Key changes
     // Re-derive and push the wake key to the platform radio driver so that platforms with
     // OT_RADIO_CAPS_TRANSMIT_SEC can encrypt TD Wake Frames (key index 129) in hardware.
+    LogInfo("UpdateKeyMaterial: pushing wake key to platform");
     IgnoreError(Get<Mac::SubMac>().SetWakeKey(Mac::Frame::kWakeKeyIndex, &GetDefaultWakeKey()));
 #endif
 

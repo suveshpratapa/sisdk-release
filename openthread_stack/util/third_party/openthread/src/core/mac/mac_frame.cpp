@@ -1823,7 +1823,10 @@ Error RxFrame::ProcessReceiveAesCcm(const ExtAddress &aExtAddress, const KeyMate
     aesCcm.Payload(nullptr, GetPayload(), GetPayloadLength(), Crypto::AesCcm::kDecrypt);
 #endif
     aesCcm.Finalize(tag);
-
+    otLogInfoPlat("WakeRx: fc=%lu, src=%s, tagLen=%u", ToUlong(frameCounter), aExtAddress.ToString().AsCString(),
+                  tagLength);
+    otLogInfoPlat("WakeRx MIC: computed=%02x%02x%02x%02x, frame=%02x%02x%02x%02x", tag[0], tag[1], tag[2], tag[3],
+                  GetFooter()[0], GetFooter()[1], GetFooter()[2], GetFooter()[3]);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     VerifyOrExit(memcmp(tag, GetFooter(), tagLength) == 0);
 #endif
