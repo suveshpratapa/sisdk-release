@@ -46,8 +46,6 @@
 extern "C" {
 #endif
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
-
 /**
  * Maximum byte length of the Thread Direct Enh-ACK Thread Header IE payload
  * (Challenge LTV echo plus optional SCA LTV).
@@ -77,8 +75,6 @@ uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
                                                      otRadioFrame *aReceivedFrame,
                                                      uint8_t      *aIeData,
                                                      uint8_t       aAvailable);
-
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 
 /**
  * Returns whether the local SLW schedule is active (period != 0).

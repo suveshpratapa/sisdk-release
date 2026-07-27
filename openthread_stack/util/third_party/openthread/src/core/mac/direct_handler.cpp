@@ -113,6 +113,30 @@ exit:
 }
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 
+constexpr uint8_t kSupervisionIntervalUnitMs = 100; ///< Unit of the TD Link Command Supervision Interval field.
+
+uint8_t EncodeSupervisionIntervalMs(uint32_t aIntervalMs)
+{
+    return static_cast<uint8_t>(aIntervalMs / kSupervisionIntervalUnitMs);
+}
+
+uint16_t ParseTdLinkCommandSupervisionIntervalMs(const Mac::RxFrame &aFrame)
+{
+    static constexpr uint8_t kLinkParamMaskIndex       = 2;
+    static constexpr uint8_t kSupervisionIntervalIndex = 3;
+
+    const uint8_t *payload    = aFrame.GetPayload();
+    uint16_t       intervalMs = 0;
+
+    VerifyOrExit((payload != nullptr) && (aFrame.GetPayloadLength() > kSupervisionIntervalIndex));
+    VerifyOrExit(payload[kLinkParamMaskIndex] & Mac::Frame::kLinkParamMaskSupervisionInterval);
+
+    intervalMs = static_cast<uint16_t>(payload[kSupervisionIntervalIndex]) * kSupervisionIntervalUnitMs;
+
+exit:
+    return intervalMs;
+}
+
 } // namespace
 
 DirectHandler::DirectHandler(Instance &aInstance)
@@ -122,7 +146,7 @@ DirectHandler::DirectHandler(Instance &aInstance)
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     , mWlState(kWlIdle)
-    , mWlAttachDelayTimer(aInstance)
+    , mWlStateTimer(aInstance)
 #endif
     , mSlwSlotDurationUs(0)
     , mSlwPeriodUs(0)
@@ -135,6 +159,9 @@ DirectHandler::DirectHandler(Instance &aInstance)
     , mTeardownLastScaRxTs(0)
     , mTeardownSlwPeriodUs(0)
     , mTeardownSlwPhaseUs(0)
+    , mSupervisionTimer(aInstance)
+    , mSupervisionKeyIndex(Mac::Frame::kWakeKeyIndex)
+    , mSupervisionPending(false)
 #endif
 {
     memset(&mLocalSca, 0, sizeof(mLocalSca));
@@ -215,7 +242,7 @@ Error DirectHandler::SetSlwTimeout(uint32_t aTimeout)
     Error error = kErrorNone;
 
     VerifyOrExit(aTimeout <= kMaxSlwTimeout, error = kErrorInvalidArgs);
-    mSlwTimeout = (aTimeout == 0) ? kDefaultSlwTimeout : aTimeout;
+    mSlwTimeout = aTimeout;
 
 exit:
     return error;
@@ -251,6 +278,7 @@ Error DirectHandler::Unlink(const Mac::ExtAddress &aExtAddress)
     mTeardownSlwPhaseUs  = peer->GetSlwPhaseUs();
     peer->Clear();
     Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
+    DetermineNextSupervisionFireTime();
     LogInfo("TD: unlinked from %s, sending teardown", aExtAddress.ToString().AsCString());
 
     {
@@ -343,6 +371,7 @@ void DirectHandler::HandleTeardownRxd(const Mac::ExtAddress &aPeerAddr)
     {
         peer->Clear();
         Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
+        DetermineNextSupervisionFireTime();
         LogInfo("TD: received teardown from %s", aPeerAddr.ToString().AsCString());
 
         {
@@ -385,11 +414,11 @@ void DirectHandler::HandleWakeReceived(const Mac::WakeupInfo &aWakeupInfo)
 
         if (delayMs == 0)
         {
-            mWlAttachDelayTimer.FireAt(TimerMilli::GetNow());
+            mWlStateTimer.FireAt(TimerMilli::GetNow());
         }
         else
         {
-            mWlAttachDelayTimer.FireAt(TimerMilli::GetNow() + delayMs);
+            mWlStateTimer.FireAt(TimerMilli::GetNow() + delayMs);
         }
     }
 
@@ -397,21 +426,114 @@ exit:
     return;
 }
 
-void DirectHandler::HandleWlAttachDelayTimer(void)
+void DirectHandler::HandleWlStateTimer(void)
 {
-    VerifyOrExit(mWlState == kWlAttachDelay);
+    if (mWlState == kWlAttachDelay)
+    {
+        mWlState = kWlWaitingEnhAck;
+        Get<Mac::SubMac>().SetActiveBurstWakeKeyIndex(mWakeupInfo.mWakeKeyIndex);
 
-    mWlState = kWlWaitingEnhAck;
-    Get<Mac::SubMac>().SetActiveBurstWakeKeyIndex(mWakeupInfo.mWakeKeyIndex);
+        // Start SLW now so GetLocalSca() computes an accurate non-zero phase.
+        // The WI uses that phase to schedule message 4 to our first SLW window.
+        Get<Mac::Mac>().BeginPreLinkThreadDirectSlw();
 
-    // Start SLW now so GetLocalSca() computes an accurate non-zero phase.
-    // The WI uses that phase to schedule message 4 to our first SLW window.
-    Get<Mac::Mac>().BeginPreLinkThreadDirectSlw();
+        Get<Mac::Mac>().RequestTdLinkCmdTransmission();
+        ExitNow();
+    }
 
-    Get<Mac::Mac>().RequestTdLinkCmdTransmission();
+    VerifyOrExit(mWlState == kWlWaitingPeerTdLinkCmd);
+
+    LogInfo("TD WL: timed out waiting for peer TD Link Cmd from %s", mWakeupInfo.mExtAddress.ToString().AsCString());
+    mWlState = kWlIdle;
+    ResumeWakeListening();
 
 exit:
     return;
+}
+
+void DirectHandler::StartWlPeerTdLinkCmdTimeout(void)
+{
+    uint64_t timeoutUs = static_cast<uint64_t>(kWlPeerTdLinkCmdTimeoutPeriods) * mSlwPeriodUs;
+    uint32_t timeoutMs = static_cast<uint32_t>((timeoutUs + Time::kOneMsecInUsec - 1) / Time::kOneMsecInUsec);
+
+    if (timeoutMs < kMinWlPeerTdLinkCmdTimeoutMs)
+    {
+        timeoutMs = kMinWlPeerTdLinkCmdTimeoutMs;
+    }
+
+    mWlStateTimer.FireAt(TimerMilli::GetNow() + timeoutMs);
+    LogInfo("TD WL: waiting up to %lums for peer TD Link Cmd", ToUlong(timeoutMs));
+}
+
+bool DirectHandler::TryAddWlPeer(const Mac::ExtAddress &aPeerAddr,
+                                 const Mac::ScaParams  &aPeerSca,
+                                 uint64_t               aRxTimestamp)
+{
+    DirectPeer *peer;
+
+    if ((mWlState != kWlWaitingPeerTdLinkCmd) || (aPeerAddr != mWakeupInfo.mExtAddress))
+    {
+        return false;
+    }
+
+    peer = Get<DirectPeerTable>().FindPeer(aPeerAddr, DirectPeer::kInStateAny);
+
+    if (peer != nullptr)
+    {
+        peer->Clear();
+    }
+    else
+    {
+        peer = Get<DirectPeerTable>().GetNewPeer();
+    }
+
+    if (peer == nullptr)
+    {
+        LogWarn("TD WL: no buffer to add peer %s", aPeerAddr.ToString().AsCString());
+        mWlState = kWlIdle;
+        ResumeWakeListening();
+        return true;
+    }
+
+    peer->SetExtAddress(aPeerAddr);
+    peer->SetState(Neighbor::kStateValid);
+    peer->SetWakeKeyIndex(mWakeupInfo.mWakeKeyIndex);
+    peer->SetWakeKeyUsed(true);
+    peer->SetLastWakeFrameCounter(mWakeupInfo.mWakeFrameCounter);
+    peer->SetHasScaSchedule(aPeerSca.mHasSlw);
+    peer->SetCoexEnabled(aPeerSca.mHasSlw && aPeerSca.mRamAvailable);
+
+    if (aPeerSca.mHasSlw)
+    {
+        peer->UpdateSca(aPeerSca, aRxTimestamp);
+    }
+    else
+    {
+        Mac::ScaParams emptySca = Mac::ScaParams();
+
+        emptySca.mSlotDuration = Mac::ScaSlotDuration::k625Usec;
+        emptySca.mRamAvailable = false;
+        peer->SetSca(emptySca);
+        peer->SetLastScaRxTimestamp(0);
+    }
+
+    mWlStateTimer.Stop();
+
+    Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
+    DetermineNextSupervisionFireTime();
+    LogInfo("TD WL: linked with %s (peer TD Link Cmd received)", aPeerAddr.ToString().AsCString());
+
+    mWlState = kWlIdle;
+
+    {
+        otThreadDirectPeerInfo peerInfo;
+
+        ClearAllBytes(peerInfo);
+        static_cast<Mac::ExtAddress &>(peerInfo.mExtAddress) = aPeerAddr;
+        Get<Mac::Mac>().InvokeDirectEvent(OT_THREAD_DIRECT_EVENT_LINKED, &peerInfo);
+    }
+
+    return true;
 }
 
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
@@ -426,6 +548,8 @@ Mac::TxFrame *DirectHandler::PrepareTdLinkCmdFrame(Mac::TxFrames &aTxFrames)
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
     if (mWiState == kWiSendingTdLinkCmd)
     {
+        uint8_t supervisionIntervalByte = EncodeSupervisionIntervalMs(GetSlwTimeout());
+
 #if OPENTHREAD_CONFIG_MULTI_RADIO
         frame = &aTxFrames.GetTxFrame(Mac::kRadioTypeIeee802154);
 #else
@@ -434,7 +558,7 @@ Mac::TxFrame *DirectHandler::PrepareTdLinkCmdFrame(Mac::TxFrames &aTxFrames)
 
         SuccessOrExit(error = frame->GenerateThreadDirectLinkCommand(Get<Mac::Mac>().GetPanId(), mWiPendingPeerAddr,
                                                                      Get<Mac::Mac>().GetExtAddress(), GetLocalSca(),
-                                                                     nullptr, nullptr, nullptr));
+                                                                     nullptr, &supervisionIntervalByte, nullptr));
 
         frame->SetCsmaCaEnabled(false);
         frame->SetMaxFrameRetries(0);
@@ -488,15 +612,19 @@ Mac::TxFrame *DirectHandler::PrepareTdLinkCmdFrame(Mac::TxFrames &aTxFrames)
                                                              Get<Mac::SubMac>().GetWakeFrameCounter(),
                                                              mWakeupInfo.mWakeFrameCounter, nullptr, 0, mWlChallenge));
 
+    {
+        uint8_t supervisionIntervalByte = EncodeSupervisionIntervalMs(GetSlwTimeout());
+
 #if OPENTHREAD_CONFIG_MULTI_RADIO
-    frame = &aTxFrames.GetTxFrame(Mac::kRadioTypeIeee802154);
+        frame = &aTxFrames.GetTxFrame(Mac::kRadioTypeIeee802154);
 #else
-    frame = &aTxFrames.GetTxFrame();
+        frame = &aTxFrames.GetTxFrame();
 #endif
 
-    SuccessOrExit(error = frame->GenerateThreadDirectLinkCommand(Get<Mac::Mac>().GetPanId(), mWakeupInfo.mExtAddress,
-                                                                 Get<Mac::Mac>().GetExtAddress(), GetLocalSca(),
-                                                                 &mWlChallenge, nullptr, nullptr));
+        SuccessOrExit(error = frame->GenerateThreadDirectLinkCommand(
+                          Get<Mac::Mac>().GetPanId(), mWakeupInfo.mExtAddress, Get<Mac::Mac>().GetExtAddress(),
+                          GetLocalSca(), &mWlChallenge, &supervisionIntervalByte, nullptr));
+    }
 
     frame->SetCsmaCaEnabled(true);
     frame->SetMaxCsmaBackoffs(Mac::kMaxCsmaBackoffsDirect);
@@ -582,7 +710,19 @@ void DirectHandler::HandleTdLinkCmdTxDone(Mac::TxFrame &aFrame, Mac::RxFrame *aA
         // Enh-ACK is a plain ACK with no Thread Header IE required.  Receipt of any
         // Enh-ACK is sufficient to confirm the WL accepted the exchange.
 
+        {
+            DirectPeer *peer = Get<DirectPeerTable>().FindPeer(mWiPendingPeerAddr, DirectPeer::kInStateValid);
+
+            if (peer != nullptr)
+            {
+                peer->SetLastActivityTime(TimerMilli::GetNow());
+                peer->ResetSupervisionProbeAttempts();
+                peer->SetSupervisionProbePending(false);
+            }
+        }
+
         Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
+        DetermineNextSupervisionFireTime();
         LogInfo("TD WI: linked with %s (own TD Link Cmd ACKed)", mWiPendingPeerAddr.ToString().AsCString());
 
         {
@@ -647,42 +787,11 @@ void DirectHandler::HandleTdLinkCmdTxDone(Mac::TxFrame &aFrame, Mac::RxFrame *aA
             error = kErrorSecurity;
             ExitNow();
         }
-
-        {
-            DirectPeer *peer = Get<DirectPeerTable>().FindPeer(mWakeupInfo.mExtAddress, DirectPeer::kInStateAny);
-
-            if (peer == nullptr)
-            {
-                peer = Get<DirectPeerTable>().GetNewPeer();
-                VerifyOrExit(peer != nullptr, error = kErrorNoBufs);
-            }
-
-            peer->SetExtAddress(mWakeupInfo.mExtAddress);
-            peer->SetState(Neighbor::kStateValid);
-            peer->SetWakeKeyIndex(mWakeupInfo.mWakeKeyIndex);
-            peer->SetWakeKeyUsed(true);
-            peer->SetLastWakeFrameCounter(mWakeupInfo.mWakeFrameCounter);
-
-            if (wiSca.mHasSlw)
-            {
-                peer->SetSlwPeriodSlots(wiSca.mSlwPeriodSlots);
-                peer->SetSlwPhaseSlots(wiSca.mSlwPhaseSlots);
-                peer->SetHasScaSchedule(true);
-                peer->SetCoexEnabled(wiSca.mRamAvailable);
-            }
-
-            Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
-            LogInfo("TD WL: linked with %s", mWakeupInfo.mExtAddress.ToString().AsCString());
-        }
-
-        mWlState = kWlIdle;
-        {
-            otThreadDirectPeerInfo peerInfo;
-
-            ClearAllBytes(peerInfo);
-            static_cast<Mac::ExtAddress &>(peerInfo.mExtAddress) = mWakeupInfo.mExtAddress;
-            Get<Mac::Mac>().InvokeDirectEvent(OT_THREAD_DIRECT_EVENT_LINKED, &peerInfo);
-        }
+        OT_UNUSED_VARIABLE(wiSca);
+        mWlState = kWlWaitingPeerTdLinkCmd;
+        StartWlPeerTdLinkCmdTimeout();
+        LogInfo("TD WL: challenge echoed by %s, waiting for peer TD Link Cmd",
+                mWakeupInfo.mExtAddress.ToString().AsCString());
         ExitNow();
     }
 
@@ -725,12 +834,183 @@ void DirectHandler::HandleTdTeardownTxDone(Mac::TxFrame &aFrame, Error aError)
 #endif
 }
 
+uint32_t DirectHandler::GetEffectiveSupervisionIntervalMs(const DirectPeer &aPeer) const
+{
+    uint32_t local = mSlwTimeout;
+    uint32_t peer  = aPeer.GetSupervisionIntervalMs();
+    uint32_t effective;
+
+    if (peer == 0)
+    {
+        effective = local;
+    }
+    else if (local == 0)
+    {
+        effective = peer;
+    }
+    else
+    {
+        effective = (local < peer) ? local : peer;
+    }
+
+    return effective;
+}
+
+uint32_t DirectHandler::GetSupervisionRetryDelayMs(const DirectPeer &aPeer) const
+{
+    // A retrying probe is paced at the peer's SLW schedule, otherwise we use
+    // `kMinSupervisionRetryDelayMs`
+    uint32_t delayMs = static_cast<uint32_t>(aPeer.GetSlwPeriodUs() / 1000);
+
+    return (delayMs < kMinSupervisionRetryDelayMs) ? kMinSupervisionRetryDelayMs : delayMs;
+}
+
+TimeMilli DirectHandler::GetSupervisionDeadline(const DirectPeer &aPeer, uint32_t aIntervalMs) const
+{
+    // A peer with at least one outstanding failure is in a fast-retry backoff anchored to
+    // the completion of its last probe attempt, not the (now stale) last-activity time --
+    // otherwise every re-check would see the same expired idle deadline and retry with no
+    // delay at all.
+    return (aPeer.GetSupervisionProbeAttempts() > 0)
+               ? (aPeer.GetLastSupervisionProbeTime() + GetSupervisionRetryDelayMs(aPeer))
+               : (aPeer.GetLastActivityTime() + aIntervalMs);
+}
+
+void DirectHandler::RequestSupervisionProbe(DirectPeer &aPeer)
+{
+    VerifyOrExit(!mSupervisionPending);
+
+    aPeer.SetSupervisionProbePending(true);
+    mSupervisionAddr     = aPeer.GetExtAddress();
+    mSupervisionKeyIndex = aPeer.GetWakeKeyIndex();
+    mSupervisionPending  = true;
+    Get<Mac::Mac>().RequestTdSupervisionTransmission();
+
+exit:
+    return;
+}
+
+void DirectHandler::DetermineNextSupervisionFireTime(void)
+{
+    NextFireTime nextFireTime;
+
+    for (DirectPeer &peer : Get<DirectPeerTable>().Iterate(DirectPeer::kInStateValid))
+    {
+        uint32_t intervalMs = GetEffectiveSupervisionIntervalMs(peer);
+
+        if (intervalMs == 0)
+        {
+            continue;
+        }
+
+        nextFireTime.UpdateIfEarlier(peer.IsSupervisionProbePending() ? (nextFireTime.GetNow() + intervalMs)
+                                                                      : GetSupervisionDeadline(peer, intervalMs));
+    }
+
+    mSupervisionTimer.FireAt(nextFireTime);
+}
+
+void DirectHandler::HandleSupervisionTimer(void)
+{
+    TimeMilli now = TimerMilli::GetNow();
+
+    for (DirectPeer &peer : Get<DirectPeerTable>().Iterate(DirectPeer::kInStateValid))
+    {
+        uint32_t intervalMs = GetEffectiveSupervisionIntervalMs(peer);
+
+        if ((intervalMs != 0) && !peer.IsSupervisionProbePending() && (now >= GetSupervisionDeadline(peer, intervalMs)))
+        {
+            RequestSupervisionProbe(peer);
+        }
+    }
+
+    DetermineNextSupervisionFireTime();
+}
+
+Mac::TxFrame *DirectHandler::PrepareSupervisionFrame(Mac::TxFrames &aTxFrames)
+{
+    Mac::TxFrame *frame = nullptr;
+
+    VerifyOrExit(mSupervisionPending);
+    mSupervisionPending = false;
+
+    Get<Mac::SubMac>().SetActiveBurstWakeKeyIndex(mSupervisionKeyIndex);
+
+#if OPENTHREAD_CONFIG_MULTI_RADIO
+    frame = &aTxFrames.GetTxFrame(Mac::kRadioTypeIeee802154);
+#else
+    frame = &aTxFrames.GetTxFrame();
+#endif
+
+    if (frame->GenerateThreadDirectSupervision(Get<Mac::Mac>().GetPanId(), mSupervisionAddr,
+                                               Get<Mac::Mac>().GetExtAddress(), GetLocalSca()) != kErrorNone)
+    {
+        LogWarn("TD: supervision frame build failed");
+        ExitNow(frame = nullptr);
+    }
+
+    frame->SetCsmaCaEnabled(false);
+    frame->SetMaxFrameRetries(0);
+
+    {
+        Mac::Address dest;
+
+        dest.SetExtended(mSupervisionAddr);
+        Get<Mac::Mac>().ApplyThreadDirectTxScheduling(*frame, dest);
+    }
+
+exit:
+    return frame;
+}
+
+void DirectHandler::HandleSupervisionTxDone(Mac::TxFrame &aFrame, Error aError)
+{
+    DirectPeer *peer = Get<DirectPeerTable>().FindPeer(mSupervisionAddr, DirectPeer::kInStateValid);
+
+    OT_UNUSED_VARIABLE(aFrame);
+
+    VerifyOrExit(peer != nullptr);
+
+    peer->SetSupervisionProbePending(false);
+    peer->SetLastSupervisionProbeTime(TimerMilli::GetNow());
+
+    if (aError == kErrorNone)
+    {
+        peer->ResetSupervisionProbeAttempts();
+        peer->SetLastActivityTime(TimerMilli::GetNow());
+        LogDebg("TD: supervision probe to %s ACKed", mSupervisionAddr.ToString().AsCString());
+        DetermineNextSupervisionFireTime();
+        ExitNow();
+    }
+
+    peer->IncrementSupervisionProbeAttempts();
+
+    if (peer->GetSupervisionProbeAttempts() >= kMaxSupervisionFailures)
+    {
+        LogWarn("TD: supervision probe to %s failed %u times, unlinking", mSupervisionAddr.ToString().AsCString(),
+                kMaxSupervisionFailures);
+        IgnoreError(Unlink(mSupervisionAddr));
+        ExitNow();
+    }
+
+    // The retry is scheduled a fast-retry delay out from this attempt's completion,
+    // rather than requested immediately.
+    LogInfo("TD: supervision probe to %s failed (%u/%u), retrying", mSupervisionAddr.ToString().AsCString(),
+            peer->GetSupervisionProbeAttempts(), kMaxSupervisionFailures);
+    DetermineNextSupervisionFireTime();
+
+exit:
+    return;
+}
+
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
 void DirectHandler::ResumeWakeListening(void)
 {
+    mWlStateTimer.Stop();
+
     // Stop pre-link SLW if it was started in HandleWlAttachDelayTimer but
     // linking failed before a valid peer was created.
     Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
@@ -766,6 +1046,8 @@ void DirectHandler::HandleTdDirectFrame(const Mac::RxFrame &aFrame)
             ExitNow();
         }
 
+        IgnoreReturnValue(TryAddWlPeer(srcAddress.GetExtended(), wiSca, aFrame.GetTimestamp()));
+
         if (wiSca.mHasSlw)
         {
             DirectPeer *peer = Get<DirectPeerTable>().FindPeer(srcAddress.GetExtended(), DirectPeer::kInStateValid);
@@ -779,6 +1061,16 @@ void DirectHandler::HandleTdDirectFrame(const Mac::RxFrame &aFrame)
             {
                 LogInfo("TD WL: SCA update from %s ignored, no linked peer",
                         srcAddress.GetExtended().ToString().AsCString());
+            }
+        }
+
+        {
+            uint16_t    supervisionIntervalMs = ParseTdLinkCommandSupervisionIntervalMs(aFrame);
+            DirectPeer *peer = Get<DirectPeerTable>().FindPeer(srcAddress.GetExtended(), DirectPeer::kInStateValid);
+
+            if (peer != nullptr && supervisionIntervalMs != 0)
+            {
+                peer->SetSupervisionIntervalMs(supervisionIntervalMs);
             }
         }
     }
@@ -836,13 +1128,29 @@ void DirectHandler::HandleTdLinkCommand(const Mac::RxFrame &aFrame)
         {
             // No Challenge LTV: this is the peer's own TD Link Command carrying its SCA LTV
             // (the 4th message in the handshake).  Update the peer's schedule and return.
-            DirectPeer *peer = Get<DirectPeerTable>().FindPeer(srcAddress.GetExtended(), DirectPeer::kInStateValid);
+            DirectPeer *peer = nullptr;
 
-            if (peer != nullptr && wlSca.mHasSlw)
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+            IgnoreReturnValue(TryAddWlPeer(srcAddress.GetExtended(), wlSca, aFrame.GetTimestamp()));
+#endif
+
+            peer = Get<DirectPeerTable>().FindPeer(srcAddress.GetExtended(), DirectPeer::kInStateValid);
+
+            if (peer != nullptr)
             {
-                peer->UpdateSca(wlSca, aFrame.GetTimestamp());
-                Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
-                LogInfo("TD: updated peer SCA from %s", srcAddress.GetExtended().ToString().AsCString());
+                uint16_t supervisionIntervalMs = ParseTdLinkCommandSupervisionIntervalMs(aFrame);
+
+                if (wlSca.mHasSlw)
+                {
+                    peer->UpdateSca(wlSca, aFrame.GetTimestamp());
+                    Get<Mac::Mac>().RefreshThreadDirectSlwScheduling();
+                    LogInfo("TD: updated peer SCA from %s", srcAddress.GetExtended().ToString().AsCString());
+                }
+
+                if (supervisionIntervalMs != 0)
+                {
+                    peer->SetSupervisionIntervalMs(supervisionIntervalMs);
+                }
             }
 
             ExitNow();
@@ -865,6 +1173,8 @@ void DirectHandler::HandleTdLinkCommand(const Mac::RxFrame &aFrame)
                     srcAddress.GetExtended().ToString().AsCString());
             ExitNow();
         }
+        uint16_t supervisionIntervalMs = ParseTdLinkCommandSupervisionIntervalMs(aFrame);
+
         peer->SetExtAddress(srcAddress.GetExtended());
         peer->SetState(Neighbor::kStateValid);
         peer->SetWakeKeyIndex(wakeKeyIndex);
@@ -874,6 +1184,11 @@ void DirectHandler::HandleTdLinkCommand(const Mac::RxFrame &aFrame)
         if (wlSca.mHasSlw)
         {
             peer->UpdateSca(wlSca, aFrame.GetTimestamp());
+        }
+
+        if (supervisionIntervalMs != 0)
+        {
+            peer->SetSupervisionIntervalMs(supervisionIntervalMs);
         }
 
         LogInfo("TD WI: WL handshake done, sending own TD Link Cmd to %s",

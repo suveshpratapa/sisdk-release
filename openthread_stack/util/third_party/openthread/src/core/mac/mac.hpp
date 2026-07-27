@@ -284,6 +284,16 @@ public:
     void RequestTeardownTransmission(void);
 #endif
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    /**
+     * Requests `Mac` to transmit a Thread Direct link supervision probe.
+     *
+     * Called by `DirectHandler` when a linked peer has been idle for its
+     * effective Supervision Interval.
+     */
+    void RequestTdSupervisionTransmission(void);
+#endif
+
     /**
      * Requests transmission of a data poll (MAC Data Request) frame.
      *
@@ -958,6 +968,9 @@ private:
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
         kOperationTransmitTdTeardown,
+#endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+        kOperationTransmitTdSupervision,
 #endif
     };
 

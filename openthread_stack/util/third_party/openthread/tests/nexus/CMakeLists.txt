@@ -458,6 +458,7 @@ ot_nexus_test(large_network "core;large_network;nexus")
 # Thread Direct
 ot_nexus_test(td_link_handshake "thread_direct;nexus")
 ot_nexus_test(td_tx_scheduler "thread_direct;nexus")
+ot_nexus_test(td_supervision "thread_direct;nexus")
 
 # Live Demo Persistent Server
 if(EMSCRIPTEN)

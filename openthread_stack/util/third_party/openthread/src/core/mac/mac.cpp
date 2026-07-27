@@ -229,6 +229,9 @@ bool Mac::IsInTransmitState(void) const
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     case kOperationTransmitTdTeardown:
 #endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    case kOperationTransmitTdSupervision:
+#endif
         retval = true;
         break;
 
@@ -555,6 +558,17 @@ exit:
 }
 #endif
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+void Mac::RequestTdSupervisionTransmission(void)
+{
+    VerifyOrExit(IsEnabled());
+    StartOperation(kOperationTransmitTdSupervision);
+
+exit:
+    return;
+}
+#endif
+
 Error Mac::RequestDataPollTransmission(void)
 {
     Error error = kErrorNone;
@@ -709,6 +723,12 @@ void Mac::PerformNextOperation(void)
         mOperation = kOperationTransmitTdTeardown;
     }
 #endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    else if (IsPending(kOperationTransmitTdSupervision))
+    {
+        mOperation = kOperationTransmitTdSupervision;
+    }
+#endif
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     else if (IsPending(kOperationTransmitDataCsl) && TimerMilli::GetNow() >= mCslTxFireTime)
     {
@@ -800,6 +820,9 @@ void Mac::PerformNextOperation(void)
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     case kOperationTransmitTdTeardown:
+#endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    case kOperationTransmitTdSupervision:
 #endif
         BeginTransmit();
         break;
@@ -1147,6 +1170,14 @@ void Mac::BeginTransmit(void)
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     case kOperationTransmitTdTeardown:
         frame = Get<DirectHandler>().PrepareTeardownFrame(txFrames);
+        VerifyOrExit(frame != nullptr);
+        frame->SetChannel(mRadioChannel);
+        break;
+#endif
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    case kOperationTransmitTdSupervision:
+        frame = Get<DirectHandler>().PrepareSupervisionFrame(txFrames);
         VerifyOrExit(frame != nullptr);
         frame->SetChannel(mRadioChannel);
         break;
@@ -1645,6 +1676,14 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
     case kOperationTransmitTdTeardown:
         FinishOperation();
         Get<DirectHandler>().HandleTdTeardownTxDone(aFrame, aError);
+        PerformNextOperation();
+        break;
+#endif
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    case kOperationTransmitTdSupervision:
+        FinishOperation();
+        Get<DirectHandler>().HandleSupervisionTxDone(aFrame, aError);
         PerformNextOperation();
         break;
 #endif
@@ -2268,6 +2307,31 @@ void Mac::HandleReceivedFrame(RxFrame *aFrame, Error aError)
 
     case Frame::kTypeData:
         mCounters.mRxData++;
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+        // A Thread Direct peer includes an SCA LTV in every frame it sends, data frames
+        // included, so the schedule (and drift anchor) it advertises stays current even
+        // when application traffic -- not just link-management frames -- is flowing.
+        if (srcaddr.IsExtended())
+        {
+            const uint8_t *ieData = aFrame->GetHeaderIe(ThreadHeaderIe::kElementId);
+
+            if (ieData != nullptr)
+            {
+                ScaParams scaParams;
+                uint8_t   ieLen = reinterpret_cast<const HeaderIe *>(ieData)->GetLength();
+
+                ClearAllBytes(scaParams);
+
+                if ((ParseThreadHeaderIe(ieData + sizeof(HeaderIe), ieLen, &scaParams, nullptr, nullptr) ==
+                     kErrorNone) &&
+                    scaParams.mHasSlw)
+                {
+                    IgnoreError(UpdateThreadDirectPeerSca(srcaddr.GetExtended(), scaParams, aFrame->GetTimestamp()));
+                }
+            }
+        }
+#endif
         break;
 
     default:
@@ -2354,6 +2418,21 @@ exit:
 void Mac::UpdateNeighborLinkInfo(Neighbor &aNeighbor, const RxFrame &aRxFrame)
 {
     LinkQuality oldLinkQuality = aNeighbor.GetLinkInfo().GetLinkQualityIn();
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    // Any successful TX (Enh-ACK received) or RX exchange with a linked Thread Direct peer
+    // resets its link supervision idle clock and refreshes the local SLW drift anchor,
+    // regardless of frame type.
+    {
+        DirectPeer *peer = Get<DirectPeerTable>().FindPeer(aNeighbor.GetExtAddress(), DirectPeer::kInStateValid);
+
+        if (peer != nullptr)
+        {
+            peer->SetLastActivityTime(TimerMilli::GetNow());
+            mLinks.GetSubMac().UpdateThreadDirectSlwSyncTimestamp(aRxFrame);
+        }
+    }
+#endif
 
     aNeighbor.GetLinkInfo().AddRss(aRxFrame.GetRssi());
 
@@ -2523,7 +2602,8 @@ const char *Mac::OperationToString(Operation aOperation)
     _(kOperationTransmitDataDirect, "TransmitDataDirect")                                             \
     TdDirectOperationMapList(_) _(kOperationTransmitPoll, "TransmitPoll")                             \
         _(kOperationWaitingForData, "WaitingForData") FtdOperationMapList(_) CslTxOperationMapList(_) \
-            WakeupOperationMapList(_) TdLinkCmdOperationMapList(_) TdTeardownOperationMapList(_)
+            WakeupOperationMapList(_) TdLinkCmdOperationMapList(_) TdTeardownOperationMapList(_)      \
+                TdSupervisionOperationMapList(_)
 
 #if OPENTHREAD_FTD
 #define FtdOperationMapList(_) _(kOperationTransmitDataIndirect, "TransmitDataIndirect")
@@ -2559,6 +2639,12 @@ const char *Mac::OperationToString(Operation aOperation)
 #define TdTeardownOperationMapList(_) _(kOperationTransmitTdTeardown, "TransmitTdTeardown")
 #else
 #define TdTeardownOperationMapList(_)
+#endif
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+#define TdSupervisionOperationMapList(_) _(kOperationTransmitTdSupervision, "TransmitTdSupervision")
+#else
+#define TdSupervisionOperationMapList(_)
 #endif
 
     DefineEnumStringArray(OperationMapList);

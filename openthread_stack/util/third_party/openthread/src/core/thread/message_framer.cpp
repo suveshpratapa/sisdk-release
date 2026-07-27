@@ -62,7 +62,8 @@ void MessageFramer::PrepareMacHeaders(Mac::TxFrame &aTxFrame, Mac::TxFrame::Info
 #if OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 
 #if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || \
-    OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+    OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE ||                                                           \
+    (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     // Determine frame version and Header IE entries
@@ -91,9 +92,21 @@ void MessageFramer::PrepareMacHeaders(Mac::TxFrame &aTxFrame, Mac::TxFrame::Info
         aTxFrameInfo.mVersion = Mac::Frame::kVersion2015;
     }
 #endif
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    else if (Get<DirectPeerTable>().FindPeer(aTxFrameInfo.mAddrs.mDestination, DirectPeer::kInStateValid) != nullptr)
+    {
+        // A TDP includes the SCA LTV in every frame it sends to a linked peer, unconditionally,
+        // so the peer's receive-window prediction stays anchored even during otherwise idle links.
+        aTxFrameInfo.mAppendThreadHeaderIe = true;
+        aTxFrameInfo.mScaParams            = &Get<DirectHandler>().GetLocalSca();
+        aTxFrameInfo.mVersion              = Mac::Frame::kVersion2015;
+    }
+#endif
 
 #endif // (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-       // || OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+       // || OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE ||
+       // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+       // || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     if ((aMessage != nullptr) && aMessage->IsTimeSync())

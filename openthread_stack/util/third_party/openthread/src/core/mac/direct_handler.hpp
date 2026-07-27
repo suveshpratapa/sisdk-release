@@ -54,6 +54,8 @@
 
 namespace ot {
 
+class DirectPeer;
+
 /**
  * Manages the Thread Direct link handshake for both the Wake Initiator and
  * Wake Listener roles, and the local SCA state (SLW schedule and RAM
@@ -151,6 +153,34 @@ public:
      * @returns Pointer to the prepared `TxFrame`, or `nullptr` on error.
      */
     Mac::TxFrame *PrepareTeardownFrame(Mac::TxFrames &aTxFrames);
+
+    /**
+     * Maximum consecutive un-acked link supervision probes before a peer is unlinked.
+     */
+    static constexpr uint8_t kMaxSupervisionFailures = 7;
+
+    /**
+     * Builds the Thread Direct link supervision probe in @p aTxFrames.
+     *
+     * Called by `Mac::BeginTransmit` for `kOperationTransmitTdSupervision`.
+     *
+     * @param[in,out] aTxFrames  MAC TX frame set.
+     *
+     * @returns Pointer to the prepared `TxFrame`, or `nullptr` on error.
+     */
+    Mac::TxFrame *PrepareSupervisionFrame(Mac::TxFrames &aTxFrames);
+
+    /**
+     * Called by `Mac::HandleTransmitDone` after a link supervision probe TX completes.
+     *
+     * On ACK, resets the peer's probe attempt count and idle clock. On failure, retries
+     * at the peer's next SLW window, or unlinks the peer once `kMaxSupervisionFailures`
+     * consecutive attempts have failed.
+     *
+     * @param[in] aFrame  The transmitted supervision probe frame.
+     * @param[in] aError  TX result (`kErrorNone` on success).
+     */
+    void HandleSupervisionTxDone(Mac::TxFrame &aFrame, Error aError);
 #endif
 
     /**
@@ -176,18 +206,23 @@ public:
     uint64_t GetSlwPeriodUs(void) const { return mSlwPeriodUs; }
 
     /**
-     * Returns the SLW link inactivity timeout in seconds.
+     * Returns the local Thread Direct link supervision interval, in milliseconds.
      *
-     * @returns Current SLW timeout (seconds).
+     * This is the interval this device advertises to a peer in the TD Link Command. The
+     * interval that actually governs a given link is the minimum of the two peers' advertised
+     * values; see `DirectPeer::GetSupervisionIntervalMs()` for the peer-advertised side.
+     *
+     * @returns Current local supervision interval, in milliseconds.
      */
     uint32_t GetSlwTimeout(void) const { return mSlwTimeout; }
 
     /**
-     * Sets the SLW link inactivity timeout in seconds.
+     * Sets the local Thread Direct link supervision interval, in milliseconds.
      *
-     * @param[in] aTimeout  Timeout in seconds; 0 restores the compile-time default.
+     * @param[in] aTimeout  Interval in milliseconds; 0 imposes no local requirement, deferring
+     *                      entirely to the peer's advertised interval.
      *
-     * @retval kErrorNone         Timeout stored.
+     * @retval kErrorNone         Interval stored.
      * @retval kErrorInvalidArgs  @p aTimeout exceeds kMaxSlwTimeout.
      */
     Error SetSlwTimeout(uint32_t aTimeout);
@@ -269,6 +304,20 @@ private:
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     void HandleTeardownRxd(const Mac::ExtAddress &aPeerAddr);
+
+    // Minimum supervision probe retry delay. A peer with no SLW schedule (or one
+    // shorter than 1 ms) would otherwise compute a retry delay of zero, causing all
+    // `kMaxSupervisionFailures` attempts to fire back-to-back instead of being paced.
+    static constexpr uint32_t kMinSupervisionRetryDelayMs = 10;
+
+    uint32_t  GetEffectiveSupervisionIntervalMs(const DirectPeer &aPeer) const;
+    uint32_t  GetSupervisionRetryDelayMs(const DirectPeer &aPeer) const;
+    TimeMilli GetSupervisionDeadline(const DirectPeer &aPeer, uint32_t aIntervalMs) const;
+    void      RequestSupervisionProbe(DirectPeer &aPeer);
+    void      DetermineNextSupervisionFireTime(void);
+    void      HandleSupervisionTimer(void);
+
+    using SupervisionTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleSupervisionTimer>;
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
@@ -283,22 +332,32 @@ private:
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    static constexpr uint32_t kWlPeerTdLinkCmdTimeoutPeriods =
+        OPENTHREAD_CONFIG_THREAD_DIRECT_WL_PEER_TD_LINK_CMD_TIMEOUT_PERIODS;
+
+    // Minimum peer TD Link Command wait, in milliseconds. A WL with no SLW schedule
+    // (SLW Period 0, i.e. rx-on-when-idle) would otherwise compute a near-zero timeout.
+    static constexpr uint32_t kMinWlPeerTdLinkCmdTimeoutMs = 10;
+
     enum WlState : uint8_t
     {
-        kWlIdle,          ///< No handshake in progress.
-        kWlAttachDelay,   ///< Waiting for rendezvous time before sending TD Link Command.
-        kWlWaitingEnhAck, ///< TD Link Command TX pending or sent; waiting for Enh-ACK.
+        kWlIdle,                 ///< No handshake in progress.
+        kWlAttachDelay,          ///< Waiting for rendezvous time before sending TD Link Command.
+        kWlWaitingEnhAck,        ///< TD Link Command TX pending or sent; waiting for Enh-ACK.
+        kWlWaitingPeerTdLinkCmd, ///< Challenge was echoed; waiting for the peer's TD Link Command.
     };
 
-    void HandleWlAttachDelayTimer(void);
+    void HandleWlStateTimer(void);
+    void StartWlPeerTdLinkCmdTimeout(void);
     void ResumeWakeListening(void);
+    bool TryAddWlPeer(const Mac::ExtAddress &aPeerAddr, const Mac::ScaParams &aPeerSca, uint64_t aRxTimestamp);
 
-    using AttachDelayTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleWlAttachDelayTimer>;
+    using WlStateTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleWlStateTimer>;
 
     WlState           mWlState;
     Mac::WakeupInfo   mWakeupInfo;
     Mac::ChallengeLtv mWlChallenge;
-    AttachDelayTimer  mWlAttachDelayTimer;
+    WlStateTimer      mWlStateTimer;
 #endif
     void UpdateDerivedSlwTiming(void);
 
@@ -318,6 +377,11 @@ private:
     uint64_t mTeardownLastScaRxTs;
     uint64_t mTeardownSlwPeriodUs;
     uint64_t mTeardownSlwPhaseUs;
+
+    SupervisionTimer mSupervisionTimer;
+    Mac::ExtAddress  mSupervisionAddr;
+    uint8_t          mSupervisionKeyIndex;
+    bool             mSupervisionPending;
 #endif
 };
 

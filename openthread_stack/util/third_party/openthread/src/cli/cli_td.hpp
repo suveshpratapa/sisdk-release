@@ -80,11 +80,6 @@ private:
     otError ProcessLinkKey(Arg aArgs[]);
     otError ProcessLinkKeyRemove(Arg aArgs[]);
 
-    static void HandleDirectEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerInfo *aPeerInfo, void *aContext);
-    void        HandleDirectEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerInfo *aPeerInfo);
-
-    void OutputResult(otError aError);
-
     static const Command sCommands[];
 };
 

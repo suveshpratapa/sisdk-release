@@ -450,7 +450,6 @@ bool otMacFrameIsTdLinkCommand(const otRadioFrame *aFrame);
 void otMacFrameSetScaLtvPhase(otRadioFrame *aFrame, uint16_t aPhase);
 #endif
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 /**
  * Builds the Thread Header IE bytes for an Enh-ACK response to a TD Link Command.
  *
@@ -466,7 +465,6 @@ void otMacFrameSetScaLtvPhase(otRadioFrame *aFrame, uint16_t aPhase);
  *           Challenge LTV or @p aDest is too small.
  */
 uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8_t *aDest, uint8_t aDestLen);
-#endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 /**
@@ -492,6 +490,17 @@ void otMacFrameSetThreadDirectScaLtv(otRadioFrame *aFrame,
                                      uint16_t      aSlwPeriod,
                                      uint16_t      aSlwPhase,
                                      int16_t       aRamOffsetUs);
+
+/**
+ * Tells if @p aFrame carries an SCA LTV with SLW fields in its Thread Header IE.
+ *
+ * @param[in] aFrame  A pointer to the frame.
+ *
+ * @retval true   The frame carries an SCA LTV with a non-zero-length SLW schedule.
+ * @retval false  The frame carries no Thread Header IE, or its SCA LTV has no SLW fields
+ *                (e.g. the zero-length SCA LTV in a TD Teardown frame).
+ */
+bool otMacFrameHasThreadDirectScaLtv(const otRadioFrame *aFrame);
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE

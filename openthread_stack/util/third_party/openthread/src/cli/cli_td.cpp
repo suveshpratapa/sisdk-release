@@ -43,6 +43,7 @@
 #include "cli/cli.hpp"
 #include "common/as_core_type.hpp"
 #include "instance/instance.hpp"
+#include "mac/direct_handler.hpp"
 #include "thread/direct_peer_table.hpp"
 
 namespace ot {
@@ -126,65 +127,12 @@ otError ThreadDirect::ProcessWake(Arg aArgs[])
         }
     }
 
-    // Register for the duration of the burst; the handler unregisters on the terminal event.
-    SuccessOrExit(error =
-                      otThreadDirectWakeup(GetInstancePtr(), &extAddress, wakeType, intervalUs, durationMs, keyIndex));
+    error = otThreadDirectWakeup(GetInstancePtr(), &extAddress, wakeType, intervalUs, durationMs, keyIndex);
 
-    otThreadDirectSetEventCallback(GetInstancePtr(), HandleDirectEvent, this);
-    error = OT_ERROR_PENDING;
 exit:
     return error;
 }
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
-
-void ThreadDirect::HandleDirectEvent(otThreadDirectEvent           aEvent,
-                                     const otThreadDirectPeerInfo *aPeerInfo,
-                                     void                         *aContext)
-{
-    static_cast<ThreadDirect *>(aContext)->HandleDirectEvent(aEvent, aPeerInfo);
-}
-
-void ThreadDirect::HandleDirectEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerInfo *aPeerInfo)
-{
-    switch (aEvent)
-    {
-    case OT_THREAD_DIRECT_EVENT_WAKE_RECEIVED:
-        if (aPeerInfo != nullptr)
-        {
-            const otExtAddress &a = aPeerInfo->mExtAddress;
-            OutputLine("TD Wake Command received from: %02X%02X%02X%02X%02X%02X%02X%02X"
-                       "  type: %u rv-time: %lu us retries: %u x %u",
-                       a.m8[0], a.m8[1], a.m8[2], a.m8[3], a.m8[4], a.m8[5], a.m8[6], a.m8[7], aPeerInfo->mWakeType,
-                       static_cast<unsigned long>(aPeerInfo->mWakeRvTimeUs), aPeerInfo->mWakeRetryCount,
-                       aPeerInfo->mWakeRetryInterval);
-        }
-        break;
-
-    case OT_THREAD_DIRECT_EVENT_LINKED:
-        otThreadDirectSetEventCallback(GetInstancePtr(), nullptr, nullptr);
-        if (aPeerInfo != nullptr)
-        {
-            const otExtAddress &a = aPeerInfo->mExtAddress;
-            OutputLine("TD link established with %02X%02X%02X%02X%02X%02X%02X%02X", a.m8[0], a.m8[1], a.m8[2], a.m8[3],
-                       a.m8[4], a.m8[5], a.m8[6], a.m8[7]);
-        }
-        else
-        {
-            OutputLine("TD link established");
-        }
-        OutputResult(OT_ERROR_NONE);
-        break;
-
-    case OT_THREAD_DIRECT_EVENT_LINK_FAILED:
-        otThreadDirectSetEventCallback(GetInstancePtr(), nullptr, nullptr);
-        OutputResult(OT_ERROR_FAILED);
-        break;
-
-    case OT_THREAD_DIRECT_EVENT_UNLINKED:
-        OutputLine("TD link unlinked");
-        break;
-    }
-}
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 otError ThreadDirect::ProcessWakeListen(Arg aArgs[])
@@ -231,8 +179,6 @@ otError ThreadDirect::ProcessUnlink(Arg aArgs[])
     SuccessOrExit(error = aArgs[0].ParseAsHexString(extAddress.m8));
     VerifyOrExit(aArgs[1].IsEmpty(), error = OT_ERROR_INVALID_ARGS);
     SuccessOrExit(error = otThreadDirectUnlink(GetInstancePtr(), &extAddress));
-    OutputLine("Unlinked with %02X%02X%02X%02X%02X%02X%02X%02X", extAddress.m8[0], extAddress.m8[1], extAddress.m8[2],
-               extAddress.m8[3], extAddress.m8[4], extAddress.m8[5], extAddress.m8[6], extAddress.m8[7]);
 
 exit:
     return error;
@@ -362,7 +308,7 @@ otError ThreadDirect::ProcessLinkState(Arg aArgs[])
 
     OutputLine("slot-duration: %u", sca.mSlotDuration);
     OutputLine("slw-period:  %u slots", sca.mSlwPeriodSlots);
-    OutputLine("slw-timeout: %lu s", static_cast<unsigned long>(otThreadDirectGetSlwTimeout(GetInstancePtr())));
+    OutputLine("slw-timeout: %lu ms", static_cast<unsigned long>(otThreadDirectGetSlwTimeout(GetInstancePtr())));
     OutputLine("ram-available: %s", sca.mRam.mAvailable ? "yes" : "no");
     OutputLine("ram-duration: %u", sca.mRam.mDuration);
     OutputLine("ram-offset:   %d us", static_cast<int>(sca.mRam.mOffsetUs));
@@ -389,6 +335,8 @@ otError ThreadDirect::ProcessLinkPeers(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
 
+    uint32_t localIntervalMs = otThreadDirectGetSlwTimeout(GetInstancePtr());
+
     for (const DirectPeer &peer : AsCoreType(GetInstancePtr()).Get<DirectPeerTable>().Iterate(Neighbor::kInStateValid))
     {
         {
@@ -407,6 +355,30 @@ otError ThreadDirect::ProcessLinkPeers(Arg aArgs[])
                            a.m8[2], a.m8[3], a.m8[4], a.m8[5], a.m8[6], a.m8[7],
                            static_cast<unsigned>(peer.GetWakeKeyIndex()));
             }
+        }
+
+        {
+            uint32_t peerIntervalMs = peer.GetSupervisionIntervalMs();
+            uint32_t effectiveMs;
+
+            if (peerIntervalMs == 0)
+            {
+                effectiveMs = localIntervalMs;
+            }
+            else if (localIntervalMs == 0)
+            {
+                effectiveMs = peerIntervalMs;
+            }
+            else
+            {
+                effectiveMs = (localIntervalMs < peerIntervalMs) ? localIntervalMs : peerIntervalMs;
+            }
+
+            OutputLine("  supervision: local=%lu peer=%lu effective=%lu failures=%u/%u",
+                       static_cast<unsigned long>(localIntervalMs), static_cast<unsigned long>(peerIntervalMs),
+                       static_cast<unsigned long>(effectiveMs),
+                       static_cast<unsigned>(peer.GetSupervisionProbeAttempts()),
+                       static_cast<unsigned>(DirectHandler::kMaxSupervisionFailures));
         }
     }
 
@@ -485,8 +457,6 @@ otError ThreadDirect::Process(Arg aArgs[])
 exit:
     return error;
 }
-
-void ThreadDirect::OutputResult(otError aError) { Interpreter::GetInterpreter().OutputResult(aError); }
 
 } // namespace Cli
 } // namespace ot
