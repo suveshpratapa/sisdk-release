@@ -86,9 +86,9 @@ Error AppendScaLtv(FrameBuilder &aFrameBuilder, const ScaParams &aParams)
                              : 0u;
 
     uint8_t valueLen =
-        static_cast<uint8_t>(2u + (aParams.mRamAvailable ? (1u + ramBitsLen) : 0u) + (aParams.mHasSlw ? 4u : 0u));
+        static_cast<uint8_t>(2u + (aParams.mRamAvailable ? (1u + ramBitsLen) : 0u) + (aParams.mHasSlw ? 6u : 0u));
 
-    uint8_t value[39]; // 2 (fixed hdr) + 1 (RAM Duration) + 32 (RAM Bits) + 4 (SLW Period + Phase)
+    uint8_t value[41]; // 2 (fixed hdr) + 1 (RAM Duration) + 32 (RAM Bits) + 6 (SLW Period + Phase + accuracy)
     uint8_t pos = 0;
 
     LittleEndian::WriteUint16(fixedHdr, value + pos);
@@ -110,6 +110,8 @@ Error AppendScaLtv(FrameBuilder &aFrameBuilder, const ScaParams &aParams)
         pos += 2;
         LittleEndian::WriteUint16(aParams.mSlwPhaseSlots, value + pos);
         pos += 2;
+        value[pos++] = aParams.mClockAccuracy;
+        value[pos++] = aParams.mUncertainty;
     }
 
     return Ltv::Append(aFrameBuilder, ThreadHeaderIe::kTypeSca, value, valueLen);
@@ -186,11 +188,21 @@ Error ParseThreadHeaderIe(const uint8_t *aBuffer,
                     }
                 }
 
-                if (static_cast<uint8_t>(ltvLen - consumed) >= 4)
+                if (static_cast<uint8_t>(ltvLen - consumed) >= 6)
                 {
-                    aScaParams->mSlwPeriodSlots = LittleEndian::ReadUint16(ltvValue + consumed);
-                    aScaParams->mSlwPhaseSlots  = LittleEndian::ReadUint16(ltvValue + consumed + 2u);
-                    aScaParams->mHasSlw         = true;
+                    aScaParams->mSlwPeriodSlots   = LittleEndian::ReadUint16(ltvValue + consumed);
+                    aScaParams->mSlwPhaseSlots    = LittleEndian::ReadUint16(ltvValue + consumed + 2u);
+                    aScaParams->mClockAccuracy    = ltvValue[consumed + 4u];
+                    aScaParams->mUncertainty      = ltvValue[consumed + 5u];
+                    aScaParams->mHasSlw           = true;
+                    aScaParams->mHasClockAccuracy = true;
+                }
+                else if (static_cast<uint8_t>(ltvLen - consumed) >= 4)
+                {
+                    aScaParams->mSlwPeriodSlots   = LittleEndian::ReadUint16(ltvValue + consumed);
+                    aScaParams->mSlwPhaseSlots    = LittleEndian::ReadUint16(ltvValue + consumed + 2u);
+                    aScaParams->mHasSlw           = true;
+                    aScaParams->mHasClockAccuracy = false;
                 }
             }
         }

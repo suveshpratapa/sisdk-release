@@ -36,6 +36,7 @@
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 
+#include "common/num_utils.hpp"
 #include "instance/instance.hpp"
 #include "thread/direct_peer_table.hpp"
 
@@ -47,10 +48,11 @@ RegisterLogModule("SubMac");
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 void SubMac::ThreadDirectSlwInit(void)
 {
-    mIsThreadDirectSlwSampling = false;
-    mIsThreadDirectSlwEnabled  = false;
-    mThreadDirectSlwChannel    = 0;
-    mThreadDirectSlwPeriod     = 0;
+    mIsThreadDirectSlwSampling     = false;
+    mIsThreadDirectSlwEnabled      = false;
+    mThreadDirectSlwChannel        = 0;
+    mThreadDirectSlwPeriod         = 0;
+    mThreadDirectSlwSlotDurationUs = 0;
     mThreadDirectSlwLastSync.SetValue(0);
     mThreadDirectSlwSampleTimeRadio = 0;
     mThreadDirectSlwSampleTimeLocal.SetValue(0);
@@ -64,6 +66,8 @@ void SubMac::UpdateThreadDirectSlw(bool     aEnable,
                                    uint8_t  aChannel,
                                    uint32_t aSampleTimeRadio)
 {
+    mThreadDirectSlwSlotDurationUs = aEnable ? aSlotDurationUs : 0;
+
     bool diffEnable  = mIsThreadDirectSlwEnabled != aEnable;
     bool diffPeriod  = mThreadDirectSlwPeriod != aPeriodUs;
     bool diffChannel = mThreadDirectSlwChannel != aChannel;
@@ -123,55 +127,51 @@ exit:
 
 uint16_t SubMac::ComputeSlwPhaseSlots(uint32_t aSlotDurationUs) const
 {
-    uint32_t phaseUs = 0;
-
-    VerifyOrExit(mIsThreadDirectSlwEnabled && (mThreadDirectSlwPeriod > 0) && (aSlotDurationUs > 0));
-
-    {
-        uint32_t now        = static_cast<uint32_t>(Get<Radio>().GetNow());
-        uint32_t nextSample = mThreadDirectSlwSampleTimeRadio;
-
-        while (static_cast<int32_t>(nextSample - now) <= 0)
-        {
-            nextSample += mThreadDirectSlwPeriod;
-        }
-
-        phaseUs = nextSample - now;
-
-        if (phaseUs > mThreadDirectSlwPeriod)
-        {
-            phaseUs = mThreadDirectSlwPeriod;
-        }
-    }
-
-exit:
-    return static_cast<uint16_t>(phaseUs / aSlotDurationUs);
+    return ComputeSlwPhaseSlotsAt(static_cast<uint32_t>(Get<Radio>().GetNow()), aSlotDurationUs);
 }
 
 uint16_t SubMac::ComputeSlwPhaseSlotsAt(uint32_t aRefTimeUs, uint32_t aSlotDurationUs) const
 {
-    uint32_t phaseUs = 0;
+    uint16_t phaseSlots  = 0;
+    int16_t  ramOffsetUs = 0;
 
-    VerifyOrExit(mIsThreadDirectSlwEnabled && (mThreadDirectSlwPeriod > 0) && (aSlotDurationUs > 0));
+    OT_UNUSED_VARIABLE(aSlotDurationUs);
+    (void)ComputeSlwPhaseAndRamOffsetAt(aRefTimeUs, phaseSlots, ramOffsetUs);
 
-    {
-        uint32_t nextSample = mThreadDirectSlwSampleTimeRadio;
+    return phaseSlots;
+}
 
-        while (static_cast<int32_t>(nextSample - aRefTimeUs) <= 0)
-        {
-            nextSample += mThreadDirectSlwPeriod;
-        }
+bool SubMac::ComputeSlwPhaseAndRamOffsetAt(uint32_t aRefTimeUs, uint16_t &aPhaseSlots, int16_t &aRamOffsetUs) const
+{
+    bool     success = false;
+    uint32_t periodUs;
+    uint32_t slotUs;
+    uint32_t periodSlots;
+    uint32_t deltaUs;
+    uint32_t phaseSlots;
+    int32_t  ramOffsetUs;
 
-        phaseUs = nextSample - aRefTimeUs;
+    VerifyOrExit(mIsThreadDirectSlwEnabled && (mThreadDirectSlwPeriod > 0) && (mThreadDirectSlwSlotDurationUs > 0));
 
-        if (phaseUs > mThreadDirectSlwPeriod)
-        {
-            phaseUs = mThreadDirectSlwPeriod;
-        }
-    }
+    slotUs      = mThreadDirectSlwSlotDurationUs;
+    periodUs    = mThreadDirectSlwPeriod;
+    periodSlots = periodUs / slotUs;
+    VerifyOrExit(periodSlots > 0);
+
+    deltaUs = ((mThreadDirectSlwSampleTimeRadio % periodUs) - (aRefTimeUs % periodUs) + periodUs) % periodUs;
+
+    phaseSlots  = (deltaUs + (slotUs / 2)) / slotUs;
+    ramOffsetUs = static_cast<int32_t>(deltaUs) - static_cast<int32_t>(phaseSlots * slotUs);
+
+    VerifyOrExit(phaseSlots <= periodSlots);
+    VerifyOrExit((ramOffsetUs >= -1024) && (ramOffsetUs <= 1023));
+
+    aPhaseSlots  = static_cast<uint16_t>(phaseSlots);
+    aRamOffsetUs = static_cast<int16_t>(ramOffsetUs);
+    success      = true;
 
 exit:
-    return static_cast<uint16_t>(phaseUs / aSlotDurationUs);
+    return success;
 }
 
 void SubMac::HandleThreadDirectSlwTimer(Timer &aTimer) { aTimer.Get<SubMac>().HandleThreadDirectSlwTimer(); }
@@ -301,6 +301,13 @@ void SubMac::GetThreadDirectSlwWindowEdges(uint32_t &aAhead, uint32_t &aAfter) c
                                        Get<Radio>().GetThreadDirectSlwUncertainty() * 10,
                                        peerAccuracy.GetClockAccuracy(), peerAccuracy.GetUncertaintyInMicrosec(), aAhead,
                                        aAfter);
+
+    // SCA phase is advertised in slot units. Truncation makes reconstructed TX
+    // early; nearest-slot rounding can go either way. Cover one local slot on
+    // both edges. `kCslReceiveTimeAhead` is subtracted from `aAhead` before
+    // ReceiveAt, so this term has to live in the window, not in warmup.
+    aAhead = Min(mThreadDirectSlwPeriod / 2, aAhead + mThreadDirectSlwSlotDurationUs);
+    aAfter = Min(mThreadDirectSlwPeriod / 2, aAfter + mThreadDirectSlwSlotDurationUs);
 }
 
 uint32_t SubMac::GetThreadDirectNextCycleDrift(void) const

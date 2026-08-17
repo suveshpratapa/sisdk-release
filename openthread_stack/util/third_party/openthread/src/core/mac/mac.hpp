@@ -232,6 +232,42 @@ public:
      * @param[in] aDelayUs  Delay until MAC should promote the request to active TX, in microseconds.
      */
     void RequestThreadDirectFrameTransmission(uint32_t aDelayUs);
+
+    /**
+     * Requests a delayed TD Link Command transmission targeting a peer SLW window.
+     *
+     * @param[in] aDelayUs  Delay until MAC should promote the request to active TX, in microseconds.
+     */
+    void RequestDelayedTdLinkCmdTransmission(uint32_t aDelayUs);
+
+    /**
+     * Requests a delayed Thread Direct supervision probe transmission targeting a peer SLW window.
+     *
+     * @param[in] aDelayUs  Delay until MAC should promote the request to active TX, in microseconds.
+     */
+    void RequestDelayedTdSupervisionTransmission(uint32_t aDelayUs);
+
+    /**
+     * Requests a delayed Thread Direct teardown transmission targeting a peer SLW window.
+     *
+     * @param[in] aDelayUs  Delay until MAC should promote the request to active TX, in microseconds.
+     */
+    void RequestDelayedTdTeardownTransmission(uint32_t aDelayUs);
+
+    /**
+     * Indicates whether the MAC is idle (no operation in progress).
+     *
+     * @retval TRUE   No MAC operation is in progress.
+     * @retval FALSE  A MAC operation is in progress.
+     */
+    bool IsIdle(void) const { return mOperation == kOperationIdle; }
+
+    /**
+     * Returns the fire time of a delayed Thread Direct TX operation.
+     *
+     * @returns The fire time.
+     */
+    TimeMicro GetThreadDirectTxFireTime(void) const { return mDirectTxFireTime; }
 #endif
 
 #if OPENTHREAD_FTD
@@ -251,9 +287,18 @@ public:
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    /**
+     * Calculates the next Thread Direct TX schedule for @p aDestAddress.
+     *
+     * @param[in]  aDestAddress   Destination address.
+     * @param[in]  aFrameLength   Frame length used for request-ahead.
+     * @param[out] aSchedule      Calculated schedule.
+     * @param[in]  aEarliestUs    Optional idle bound in radio time. Zero means no extra bound.
+     */
     Error CalculateThreadDirectTxSchedule(const Address          &aDestAddress,
                                           uint16_t                aFrameLength,
-                                          ThreadDirectTxSchedule &aSchedule) const;
+                                          ThreadDirectTxSchedule &aSchedule,
+                                          uint64_t                aEarliestUs = 0) const;
 
     void ApplyThreadDirectTxSchedule(TxFrame &aFrame, const ThreadDirectTxSchedule &aSchedule) const;
 #endif
@@ -267,10 +312,10 @@ public:
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     /**
-     * Requests `Mac` to transmit a TD Link Command frame.
+     * Requests `Mac` to transmit a TD Link Command frame immediately.
      *
-     * Used by both WL (WL-initiated TD Link Command) and WI (WI's own TD Link Command
-     * carrying its SCA LTV, sent after verifying the WL's TD Link Command).
+     * Used by the WL handshake (rendezvous-timed onto a WI that is rx-on). SLW-targeted
+     * TD Link Commands use `RequestDelayedTdLinkCmdTransmission()` instead.
      */
     void RequestTdLinkCmdTransmission(void);
 #endif
@@ -288,10 +333,15 @@ public:
     /**
      * Requests `Mac` to transmit a Thread Direct link supervision probe.
      *
-     * Called by `DirectHandler` when a linked peer has been idle for its
-     * effective Supervision Interval.
+     * Called by `DirectHandler` when a linked peer has been idle for the
+     * local supervision interval.
      */
     void RequestTdSupervisionTransmission(void);
+
+    /**
+     * Drops a queued delayed supervision probe.
+     */
+    void AbortPendingTdSupervisionTransmission(void);
 #endif
 
     /**
@@ -1021,8 +1071,14 @@ private:
     bool     HandleMacCommand(RxFrame &aFrame);
     void     HandleTimer(void);
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    void HandleThreadDirectPeerRx(const ExtAddress &aExtAddress, const RxFrame &aFrame, uint64_t aTxWindowStart = 0);
     void HandleDirectTxTimer(void);
     bool ShouldStartThreadDirectTxNow(void) const;
+    bool CanStartThreadDirectOperation(Operation aOperation) const;
+    bool IsDelayedThreadDirectOperation(Operation aOperation) const;
+    void SetDelayedThreadDirectOperation(Operation aOperation);
+    void ClearDelayedThreadDirectOperation(Operation aOperation);
+    void RequestDelayedThreadDirectOperation(Operation aOperation, uint32_t aDelayUs);
 #endif
 
     void  Scan(Operation aScanOperation, uint32_t aScanChannels, uint16_t aScanDuration);
@@ -1104,6 +1160,7 @@ private:
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     TimeMicro mDirectTxFireTime;
+    uint16_t  mDelayedTdOperations;
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     bool mIsCslEnabled : 1;

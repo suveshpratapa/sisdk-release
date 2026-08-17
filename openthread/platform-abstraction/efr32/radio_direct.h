@@ -63,13 +63,17 @@ extern "C" {
  * Called from the time-critical generateAckIeData() path in radio.cpp during
  * the RAIL SL_RAIL_EVENT_IEEE802154_DATA_REQUEST_COMMAND handler.
  *
+ * SCA phase and RAM in this first pass use the current radio time as a
+ * placeholder. `sli_ot_radio_direct_update_enh_ack_ie()` overwrites them with
+ * the pair at Enh-ACK SHR-done time before the ACK is written to RAIL.
+ *
  * @param[in]  aInstance       OT instance (unused; may be nullptr).
  * @param[in]  aReceivedFrame  Incoming MAC frame with sufficient bytes buffered.
  * @param[out] aIeData         Destination IE buffer; @p aAvailable bytes of space.
  * @param[in]  aAvailable      Bytes available at @p aIeData.
  *
- * @return  Number of bytes written; 0 when no Thread Header IE with a
- *          Challenge LTV is found in @p aReceivedFrame.
+ * @return  Number of bytes written; 0 when neither a Challenge LTV nor a local
+ *          SLW schedule is available.
  */
 uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
                                                      otRadioFrame *aReceivedFrame,
@@ -118,6 +122,19 @@ bool sli_ot_radio_direct_slw_get_phase_and_ram_offset(otInstance *aInstance,
                                                       uint32_t    aMacHeaderTxTime,
                                                       uint16_t   *aPhaseSlots,
                                                       int16_t    *aRamOffsetUs);
+
+/**
+ * Patches the SCA LTV in an Enh-ACK with phase and RAM at ACK SHR-done time.
+ *
+ * DATA_REQUEST_COMMAND fires after the source address, so `otPlatAlarmMicroGetNow()`
+ * during IE generation is not the Enh-ACK MAC-header time. @p aAckShrDoneTime
+ * is that time (same remaining-PSDU + turnaround + ACK SHR math as CSL).
+ *
+ * @param[in]    aInstance         The OpenThread instance.
+ * @param[inout] aEnhAckFrame      The enhanced ACK frame to update.
+ * @param[in]    aAckShrDoneTime   Radio time (us) when the Enh-ACK SHR completes.
+ */
+void sli_ot_radio_direct_update_enh_ack_ie(otInstance *aInstance, otRadioFrame *aEnhAckFrame, uint32_t aAckShrDoneTime);
 
 #ifdef __cplusplus
 }

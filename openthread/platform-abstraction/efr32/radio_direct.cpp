@@ -35,6 +35,7 @@
 
 #include <string.h>
 #include <openthread/link.h>
+#include <openthread/platform/alarm-micro.h>
 #include <openthread/platform/radio.h>
 #include <openthread/platform/thread_direct.h>
 #include "common/code_utils.hpp"
@@ -84,8 +85,22 @@ uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
                                                      uint8_t      *aIeData,
                                                      uint8_t       aAvailable)
 {
-    OT_UNUSED_VARIABLE(aInstance);
-    return otMacFrameGenerateThreadDirectEnhAckIe(aReceivedFrame, aIeData, aAvailable);
+    otMacFrameThreadDirectSca sca;
+
+    memset(&sca, 0, sizeof(sca));
+
+    if ((aInstance != nullptr) && sli_ot_radio_direct_slw_is_present(aInstance))
+    {
+        uint32_t now = otPlatAlarmMicroGetNow();
+
+        sca.mHasSlw        = true;
+        sca.mSlwPeriod     = sli_ot_radio_direct_slw_get_period(aInstance);
+        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(aInstance);
+        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(aInstance);
+        sli_ot_radio_direct_slw_get_phase_and_ram_offset(aInstance, now, &sca.mSlwPhase, &sca.mRamOffsetUs);
+    }
+
+    return otMacFrameGenerateThreadDirectEnhAckIe(aReceivedFrame, aIeData, aAvailable, &sca);
 }
 
 otError otPlatRadioSetThreadDirectSlwSchedule(otInstance *aInstance, uint16_t aSlwPeriod, uint32_t aSlotDurationUs)
@@ -150,13 +165,30 @@ bool sli_ot_radio_direct_slw_get_phase_and_ram_offset(otInstance *aInstance,
     return success;
 }
 
-// Delegates to CSL accuracy functions; both use the same oscillator.
-OT_TOOL_WEAK uint8_t otPlatRadioGetThreadDirectSlwAccuracy(otInstance *aInstance)
+void sli_ot_radio_direct_update_enh_ack_ie(otInstance *aInstance, otRadioFrame *aEnhAckFrame, uint32_t aAckShrDoneTime)
+{
+    uint16_t phase;
+    int16_t  ramOffsetUs;
+
+    otEXPECT(aInstance != nullptr && aEnhAckFrame != nullptr);
+    otEXPECT(sli_ot_radio_direct_slw_is_present(aInstance));
+    otEXPECT(otMacFrameHasThreadDirectScaLtv(aEnhAckFrame));
+    otEXPECT(sli_ot_radio_direct_slw_get_phase_and_ram_offset(aInstance, aAckShrDoneTime, &phase, &ramOffsetUs));
+
+    otMacFrameSetThreadDirectScaLtv(aEnhAckFrame, sli_ot_radio_direct_slw_get_period(aInstance), phase, ramOffsetUs);
+
+exit:
+    return;
+}
+
+// Must be strong: the stack's radio_platform.cpp stubs are weak and return 255.
+// Delegates to CSL; both use the same oscillator.
+uint8_t otPlatRadioGetThreadDirectSlwAccuracy(otInstance *aInstance)
 {
     return otPlatRadioGetCslAccuracy(aInstance);
 }
 
-OT_TOOL_WEAK uint8_t otPlatRadioGetThreadDirectSlwUncertainty(otInstance *aInstance)
+uint8_t otPlatRadioGetThreadDirectSlwUncertainty(otInstance *aInstance)
 {
     return otPlatRadioGetCslUncertainty(aInstance);
 }

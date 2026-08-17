@@ -1418,16 +1418,15 @@ public:
                                           const ScaParams  &aScaParams);
 
     /**
-     * Patches the SLW phase field of the SCA LTV in the Thread Header IE of this frame.
+     * Patches the SLW phase and RAM offset of the SCA LTV in this frame's Thread Header IE.
      *
-     * Searches the frame's 802.15.4 Header IE list for the Thread Header IE (element 0x2d),
-     * locates the SCA LTV (type 0x02) within it, and overwrites the 2-byte SLW Phase field
-     * with @p aPhase.  A no-op if the frame contains no Thread Header IE or the SCA LTV
-     * does not carry SLW fields.
+     * A no-op if the frame contains no Thread Header IE or the SCA LTV does not carry SLW
+     * fields. Phase and RAM must be a pair computed for the same MAC-header time.
      *
-     * @param[in] aPhase  SLW phase in slot-duration units to write into the SCA LTV.
+     * @param[in] aPhase       SLW phase in slot-duration units.
+     * @param[in] aRamOffsetUs Signed RAM offset in us, in [-1024, 1023].
      */
-    void SetScaLtvPhase(uint16_t aPhase);
+    void SetScaLtvPhaseAndRamOffset(uint16_t aPhase, int16_t aRamOffsetUs);
 #endif
 
     /**

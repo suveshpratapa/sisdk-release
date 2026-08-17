@@ -46,6 +46,7 @@ ThreadDirectTxScheduler::ThreadDirectTxScheduler(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mFrameRequestAheadUs(0)
     , mPendingMessage(nullptr)
+    , mPendingCommand(kCommandNone)
     , mPendingDest()
     , mPendingSchedule()
     , mFrameCounter(0)
@@ -54,6 +55,7 @@ ThreadDirectTxScheduler::ThreadDirectTxScheduler(Instance &aInstance)
     , mDataSequence(0)
     , mKeyId(0)
     , mHasRetxFrameInfo(false)
+    , mHasPendingSchedule(false)
 {
     UpdateFrameRequestAhead();
 }
@@ -78,12 +80,116 @@ Error ThreadDirectTxScheduler::ScheduleTransmission(const Mac::ThreadDirectTxSch
         submitTime = radioNow;
     }
 
-    mPendingSchedule = aSchedule;
+    mPendingSchedule    = aSchedule;
+    mHasPendingSchedule = true;
 
-    Get<Mac::Mac>().RequestThreadDirectFrameTransmission(
-        (submitTime > radioNow) ? static_cast<uint32_t>(submitTime - radioNow) : 0);
+    if (mPendingCommand != kCommandNone)
+    {
+        RequestMacCommand(mPendingCommand, (submitTime > radioNow) ? static_cast<uint32_t>(submitTime - radioNow) : 0);
+    }
+    else
+    {
+        Get<Mac::Mac>().RequestThreadDirectFrameTransmission(
+            (submitTime > radioNow) ? static_cast<uint32_t>(submitTime - radioNow) : 0);
+    }
 
     return kErrorNone;
+}
+
+void ThreadDirectTxScheduler::RequestMacCommand(Command aCommand, uint32_t aDelayUs)
+{
+    switch (aCommand)
+    {
+    case kCommandTdLinkCmd:
+        Get<Mac::Mac>().RequestDelayedTdLinkCmdTransmission(aDelayUs);
+        break;
+
+    case kCommandSupervision:
+        Get<Mac::Mac>().RequestDelayedTdSupervisionTransmission(aDelayUs);
+        break;
+
+    case kCommandTeardown:
+        Get<Mac::Mac>().RequestDelayedTdTeardownTransmission(aDelayUs);
+        break;
+
+    case kCommandNone:
+        break;
+    }
+}
+
+void ThreadDirectTxScheduler::RequestImmediateMacCommand(Command aCommand)
+{
+    switch (aCommand)
+    {
+    case kCommandTdLinkCmd:
+        Get<Mac::Mac>().RequestTdLinkCmdTransmission();
+        break;
+
+    case kCommandSupervision:
+        Get<Mac::Mac>().RequestTdSupervisionTransmission();
+        break;
+
+    case kCommandTeardown:
+        Get<Mac::Mac>().RequestTeardownTransmission();
+        break;
+
+    case kCommandNone:
+        break;
+    }
+}
+
+Error ThreadDirectTxScheduler::ScheduleMacCommand(Command             aCommand,
+                                                  const Mac::Address &aDestAddress,
+                                                  uint64_t            aEarliestUs)
+{
+    Error                       error = kErrorNone;
+    Mac::ThreadDirectTxSchedule schedule;
+
+    VerifyOrExit(aCommand != kCommandNone, error = kErrorInvalidArgs);
+    VerifyOrExit(!IsPending(), error = kErrorBusy);
+
+    mPendingCommand     = aCommand;
+    mPendingDest        = aDestAddress;
+    mPendingSchedule    = Mac::ThreadDirectTxSchedule();
+    mHasPendingSchedule = false;
+    mPendingMessage     = nullptr;
+    mFrameCounter       = 0;
+    mFrameLength        = 0;
+    mTxAttempts         = 0;
+    mDataSequence       = 0;
+    mKeyId              = 0;
+    mHasRetxFrameInfo   = false;
+
+    error = Get<Mac::Mac>().CalculateThreadDirectTxSchedule(aDestAddress, kMaxFrameSize, schedule, aEarliestUs);
+
+    if (error == kErrorNone)
+    {
+        error = ScheduleTransmission(schedule);
+        ExitNow();
+    }
+
+    // Peer has no SLW (rx-on-when-idle): transmit immediately.
+    if (error == kErrorInvalidState)
+    {
+        mHasPendingSchedule = false;
+        RequestImmediateMacCommand(aCommand);
+        error = kErrorNone;
+        ExitNow();
+    }
+
+    Clear();
+
+exit:
+    return error;
+}
+
+void ThreadDirectTxScheduler::ApplyPendingSchedule(Mac::TxFrame &aFrame) const
+{
+    VerifyOrExit(mHasPendingSchedule);
+    Get<Mac::Mac>().ApplyThreadDirectTxSchedule(aFrame, mPendingSchedule);
+
+exit:
+    return;
 }
 
 Error ThreadDirectTxScheduler::TrySchedule(Message &aMessage, const Mac::Address &aDestAddress)
@@ -99,16 +205,18 @@ Error ThreadDirectTxScheduler::TrySchedule(Message &aMessage, const Mac::Address
     {
         VerifyOrExit(!IsPending(), error = kErrorBusy);
 
-        mPendingMessage   = &aMessage;
-        mPendingDest      = aDestAddress;
-        mPendingSchedule  = Mac::ThreadDirectTxSchedule();
-        mFrameCounter     = 0;
-        mFrameLength      = 0;
-        mTxAttempts       = 0;
-        mDataSequence     = 0;
-        mKeyId            = 0;
-        mHasRetxFrameInfo = false;
-        frameLength       = kMaxFrameSize;
+        mPendingMessage     = &aMessage;
+        mPendingCommand     = kCommandNone;
+        mPendingDest        = aDestAddress;
+        mPendingSchedule    = Mac::ThreadDirectTxSchedule();
+        mHasPendingSchedule = false;
+        mFrameCounter       = 0;
+        mFrameLength        = 0;
+        mTxAttempts         = 0;
+        mDataSequence       = 0;
+        mKeyId              = 0;
+        mHasRetxFrameInfo   = false;
+        frameLength         = kMaxFrameSize;
     }
     else
     {
@@ -264,17 +372,36 @@ exit:
     return;
 }
 
+void ThreadDirectTxScheduler::ClearIfMacCommand(void)
+{
+    if (mPendingCommand != kCommandNone)
+    {
+        Clear();
+        Get<MeshForwarder>().mScheduleTransmissionTask.Post();
+    }
+}
+
+void ThreadDirectTxScheduler::ClearIfCommand(Command aCommand)
+{
+    if (mPendingCommand == aCommand)
+    {
+        ClearIfMacCommand();
+    }
+}
+
 void ThreadDirectTxScheduler::Clear(void)
 {
-    mPendingMessage   = nullptr;
-    mPendingDest      = Mac::Address();
-    mPendingSchedule  = Mac::ThreadDirectTxSchedule();
-    mFrameCounter     = 0;
-    mFrameLength      = 0;
-    mTxAttempts       = 0;
-    mDataSequence     = 0;
-    mKeyId            = 0;
-    mHasRetxFrameInfo = false;
+    mPendingMessage     = nullptr;
+    mPendingCommand     = kCommandNone;
+    mPendingDest        = Mac::Address();
+    mPendingSchedule    = Mac::ThreadDirectTxSchedule();
+    mHasPendingSchedule = false;
+    mFrameCounter       = 0;
+    mFrameLength        = 0;
+    mTxAttempts         = 0;
+    mDataSequence       = 0;
+    mKeyId              = 0;
+    mHasRetxFrameInfo   = false;
 }
 
 } // namespace ot

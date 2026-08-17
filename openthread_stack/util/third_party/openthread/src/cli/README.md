@@ -1710,6 +1710,14 @@ List active Thread Direct peer entries.
 
 ```bash
 > direct link peers
+no peers
+Done
+```
+
+```bash
+> direct link peers
+addr: AB8967452301CDEF  key: 129  slw: 64/12 slots
+  supervision: local=200 peer=200 effective=200 failures=0/7
 Done
 ```
 
@@ -1721,6 +1729,7 @@ Requires `OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE` or `OPENTHREAD_
 
 ```bash
 > direct link ram
+available: yes
 duration: 1
 offset:   0 us
 Done
@@ -1774,42 +1783,61 @@ Done
 
 Print the current Thread Direct link state including role, SLW period, SLW timeout, and RAM parameters.
 
+`state` reflects whether a Thread Direct peer link is currently established (`linked`), taking
+priority over the role-specific idle sub-state (`waking`/`idle` for a Wake Initiator,
+`listening`/`disabled` for a Wake Listener).
+
 ```bash
 > direct link state
 role:  wl
-state: listening
+state: linked
 slw-period:  47 slots
-slw-timeout: 30 s
-ram-duration: 1
+slw-timeout: 200 ms
+ram-available: no
+ram-duration: 0
+ram-offset:   0 us
+Done
+```
+
+```bash
+> direct link state
+role:  wi
+state: idle
+slw-period:  47 slots
+slw-timeout: 200 ms
+ram-available: no
+ram-duration: 0
 ram-offset:   0 us
 Done
 ```
 
 ### direct link timeout
 
-Get the SLW supervision timeout in seconds.
+Get the SLW supervision timeout in milliseconds.
 
 ```bash
 > direct link timeout
-30
+200
 Done
 ```
 
-### direct link timeout \<seconds\>
+### direct link timeout \<milliseconds\>
 
-Set the SLW supervision timeout in seconds.
+Set the SLW supervision timeout in milliseconds.
 
 ```bash
-> direct link timeout 30
+> direct link timeout 200
 Done
 ```
 
-### direct unlink
+### direct unlink \<extaddr\>
 
-Unlink all active Thread Direct peers.
+Unlink the Thread Direct peer with the given extended address.
+
+- `extaddr`: 64-bit extended address of the peer to unlink (16 hex chars)
 
 ```bash
-> direct unlink
+> direct unlink ab8967452301cdef
 Done
 ```
 
@@ -1859,26 +1887,6 @@ Disable Thread Direct wake listening.
 
 ```bash
 > direct wakelisten disable
-Done
-```
-
-### direct wakelisten params
-
-Get the wake listen interval and duration.
-
-```bash
-> direct wakelisten params
-interval: 7500 us
-duration: 8000 us
-Done
-```
-
-### direct wakelisten params \<interval-us\> \<duration-us\>
-
-Set the wake listen interval and duration in microseconds.
-
-```bash
-> direct wakelisten params 7500 8000
 Done
 ```
 

@@ -171,16 +171,20 @@ public:
     Mac::TxFrame *PrepareSupervisionFrame(Mac::TxFrames &aTxFrames);
 
     /**
-     * Called by `Mac::HandleTransmitDone` after a link supervision probe TX completes.
-     *
-     * On ACK, resets the peer's probe attempt count and idle clock. On failure, retries
-     * at the peer's next SLW window, or unlinks the peer once `kMaxSupervisionFailures`
-     * consecutive attempts have failed.
+     * Called after a link supervision probe TX completes.
      *
      * @param[in] aFrame  The transmitted supervision probe frame.
      * @param[in] aError  TX result (`kErrorNone` on success).
      */
     void HandleSupervisionTxDone(Mac::TxFrame &aFrame, Error aError);
+
+    /**
+     * Records a secured TX or RX exchange with a linked peer.
+     *
+     * @param[in] aPeer             The linked peer.
+     * @param[in] aActivityRadioUs  Radio time of the exchange, in microseconds.
+     */
+    void HandlePeerActivity(DirectPeer &aPeer, uint64_t aActivityRadioUs);
 #endif
 
     /**
@@ -208,19 +212,19 @@ public:
     /**
      * Returns the local Thread Direct link supervision interval, in milliseconds.
      *
-     * This is the interval this device advertises to a peer in the TD Link Command. The
-     * interval that actually governs a given link is the minimum of the two peers' advertised
-     * values; see `DirectPeer::GetSupervisionIntervalMs()` for the peer-advertised side.
+     * This is the value last passed to `SetSlwTimeout()`.
      *
-     * @returns Current local supervision interval, in milliseconds.
+     * @returns Configured local supervision interval, in milliseconds.
      */
     uint32_t GetSlwTimeout(void) const { return mSlwTimeout; }
 
     /**
      * Sets the local Thread Direct link supervision interval, in milliseconds.
      *
-     * @param[in] aTimeout  Interval in milliseconds; 0 imposes no local requirement, deferring
-     *                      entirely to the peer's advertised interval.
+     * @param[in] aTimeout  Interval in milliseconds; 0 imposes no local requirement.
+     *                      Converted to a whole number of local SLW periods (at least
+     *                      one). With no SLW (rx-on), the wire field is omitted and the
+     *                      timer uses @p aTimeout.
      *
      * @retval kErrorNone         Interval stored.
      * @retval kErrorInvalidArgs  @p aTimeout exceeds kMaxSlwTimeout.
@@ -305,19 +309,21 @@ private:
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     void HandleTeardownRxd(const Mac::ExtAddress &aPeerAddr);
 
-    // Minimum supervision probe retry delay. A peer with no SLW schedule (or one
-    // shorter than 1 ms) would otherwise compute a retry delay of zero, causing all
-    // `kMaxSupervisionFailures` attempts to fire back-to-back instead of being paced.
-    static constexpr uint32_t kMinSupervisionRetryDelayMs = 10;
-
-    uint32_t  GetEffectiveSupervisionIntervalMs(const DirectPeer &aPeer) const;
-    uint32_t  GetSupervisionRetryDelayMs(const DirectPeer &aPeer) const;
-    TimeMilli GetSupervisionDeadline(const DirectPeer &aPeer, uint32_t aIntervalMs) const;
+    TimeMilli GetSupervisionDeadline(const DirectPeer &aPeer) const;
+    uint64_t  GetSupervisionEarliestRadioUs(const DirectPeer &aPeer) const;
+    uint32_t  GetSupervisionFireIntervalMs(void) const;
+    uint32_t  GetSupervisionScheduleLeadUs(void) const;
+    bool      ShouldYieldSupervisionToPeer(const DirectPeer &aPeer) const;
     void      RequestSupervisionProbe(DirectPeer &aPeer);
+    void      CancelPendingSupervisionProbe(DirectPeer &aPeer);
     void      DetermineNextSupervisionFireTime(void);
     void      HandleSupervisionTimer(void);
 
-    using SupervisionTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleSupervisionTimer>;
+    // Matches `ThreadDirectTxScheduler` request-ahead (`kMaxFrameSize`, `kFramePreparationGuardInterval`).
+    static constexpr uint16_t kSupervisionTxScheduleLength = 150;
+    static constexpr uint32_t kSupervisionScheduleGuardUs  = 500;
+
+    using SupervisionTimer = TimerMicroIn<DirectHandler, &DirectHandler::HandleSupervisionTimer>;
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
@@ -357,6 +363,8 @@ private:
     WlState           mWlState;
     Mac::WakeupInfo   mWakeupInfo;
     Mac::ChallengeLtv mWlChallenge;
+    Mac::ScaParams    mWlEnhAckSca;
+    bool              mHasWlEnhAckSca;
     WlStateTimer      mWlStateTimer;
 #endif
     void UpdateDerivedSlwTiming(void);
@@ -372,11 +380,6 @@ private:
     Mac::ExtAddress mTeardownAddr;
     uint8_t         mTeardownKeyIndex;
     bool            mTeardownPending;
-    // SCA snapshot taken in Unlink() before the peer entry is cleared, used to
-    // schedule the teardown frame to the peer's SLW window in PrepareTeardownFrame.
-    uint64_t mTeardownLastScaRxTs;
-    uint64_t mTeardownSlwPeriodUs;
-    uint64_t mTeardownSlwPhaseUs;
 
     SupervisionTimer mSupervisionTimer;
     Mac::ExtAddress  mSupervisionAddr;

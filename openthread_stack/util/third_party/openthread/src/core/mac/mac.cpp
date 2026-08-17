@@ -89,6 +89,7 @@ Mac::Mac(Instance &aInstance)
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     , mDirectTxFireTime(0)
+    , mDelayedTdOperations(0)
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     , mIsCslEnabled(false)
@@ -486,15 +487,55 @@ exit:
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 void Mac::RequestThreadDirectFrameTransmission(uint32_t aDelayUs)
 {
+    RequestDelayedThreadDirectOperation(kOperationTransmitDataDirectTd, aDelayUs);
+}
+
+void Mac::RequestDelayedTdLinkCmdTransmission(uint32_t aDelayUs)
+{
+    RequestDelayedThreadDirectOperation(kOperationTransmitTdLinkCmd, aDelayUs);
+}
+
+void Mac::RequestDelayedTdSupervisionTransmission(uint32_t aDelayUs)
+{
+    RequestDelayedThreadDirectOperation(kOperationTransmitTdSupervision, aDelayUs);
+}
+
+void Mac::RequestDelayedTdTeardownTransmission(uint32_t aDelayUs)
+{
+    RequestDelayedThreadDirectOperation(kOperationTransmitTdTeardown, aDelayUs);
+}
+
+void Mac::RequestDelayedThreadDirectOperation(Operation aOperation, uint32_t aDelayUs)
+{
     VerifyOrExit(IsEnabled());
-    VerifyOrExit(!IsActiveOrPending(kOperationTransmitDataDirectTd));
+    VerifyOrExit(!IsActiveOrPending(aOperation));
 
     mDirectTxFireTime = TimerMicro::GetNow() + aDelayUs;
-
-    StartOperation(kOperationTransmitDataDirectTd);
+    SetDelayedThreadDirectOperation(aOperation);
+    StartOperation(aOperation);
 
 exit:
     return;
+}
+
+bool Mac::IsDelayedThreadDirectOperation(Operation aOperation) const
+{
+    return (mDelayedTdOperations & (1U << aOperation)) != 0;
+}
+
+void Mac::SetDelayedThreadDirectOperation(Operation aOperation)
+{
+    mDelayedTdOperations |= static_cast<uint16_t>(1U << aOperation);
+}
+
+void Mac::ClearDelayedThreadDirectOperation(Operation aOperation)
+{
+    mDelayedTdOperations &= static_cast<uint16_t>(~(1U << aOperation));
+}
+
+bool Mac::CanStartThreadDirectOperation(Operation aOperation) const
+{
+    return !IsDelayedThreadDirectOperation(aOperation) || (TimerMicro::GetNow() >= mDirectTxFireTime);
 }
 #endif
 
@@ -567,6 +608,12 @@ void Mac::RequestTdSupervisionTransmission(void)
 exit:
     return;
 }
+
+void Mac::AbortPendingTdSupervisionTransmission(void)
+{
+    ClearPending(kOperationTransmitTdSupervision);
+    ClearDelayedThreadDirectOperation(kOperationTransmitTdSupervision);
+}
 #endif
 
 Error Mac::RequestDataPollTransmission(void)
@@ -618,7 +665,7 @@ void Mac::UpdateIdleMode(void)
     }
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    if (IsPending(kOperationTransmitDataDirectTd))
+    if ((mDelayedTdOperations & mPendingOperations) != 0)
     {
         mDirectTxTimer.FireAt(mDirectTxFireTime);
     }
@@ -712,19 +759,20 @@ void Mac::PerformNextOperation(void)
     }
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    else if (IsPending(kOperationTransmitTdLinkCmd))
+    else if (IsPending(kOperationTransmitTdLinkCmd) && CanStartThreadDirectOperation(kOperationTransmitTdLinkCmd))
     {
         mOperation = kOperationTransmitTdLinkCmd;
     }
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    else if (IsPending(kOperationTransmitTdTeardown))
+    else if (IsPending(kOperationTransmitTdTeardown) && CanStartThreadDirectOperation(kOperationTransmitTdTeardown))
     {
         mOperation = kOperationTransmitTdTeardown;
     }
 #endif
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    else if (IsPending(kOperationTransmitTdSupervision))
+    else if (IsPending(kOperationTransmitTdSupervision) &&
+             CanStartThreadDirectOperation(kOperationTransmitTdSupervision))
     {
         mOperation = kOperationTransmitTdSupervision;
     }
@@ -778,6 +826,9 @@ void Mac::PerformNextOperation(void)
     if (mOperation != kOperationIdle)
     {
         ClearPending(mOperation);
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+        ClearDelayedThreadDirectOperation(mOperation);
+#endif
         LogDebg("Starting operation \"%s\"", OperationToString(mOperation));
         mTimer.Stop(); // Stop the timer before any non-idle operation, have the operation itself be responsible to
                        // start the timer (if it wants to).
@@ -1481,6 +1532,38 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
                 }
 #endif
             }
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+            if ((aError == kErrorNone) && dstAddr.IsExtended())
+            {
+                uint64_t txWindowStart = 0;
+
+                if (Get<ThreadDirectTxScheduler>().HasPendingSchedule())
+                {
+                    txWindowStart = Get<ThreadDirectTxScheduler>().GetPendingWindowStart();
+                }
+
+                const uint8_t *ieData = aAckFrame->GetHeaderIe(ThreadHeaderIe::kElementId);
+
+                if (ieData != nullptr)
+                {
+                    ScaParams scaParams;
+                    uint8_t   ieLen = reinterpret_cast<const HeaderIe *>(ieData)->GetLength();
+
+                    ClearAllBytes(scaParams);
+
+                    if ((ParseThreadHeaderIe(ieData + sizeof(HeaderIe), ieLen, &scaParams, nullptr, nullptr) ==
+                         kErrorNone) &&
+                        scaParams.mHasSlw)
+                    {
+                        IgnoreError(
+                            UpdateThreadDirectPeerSca(dstAddr.GetExtended(), scaParams, aAckFrame->GetTimestamp()));
+                    }
+                }
+
+                HandleThreadDirectPeerRx(dstAddr.GetExtended(), *aAckFrame, txWindowStart);
+            }
+#endif
         }
     }
 #endif // OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -1668,6 +1751,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
     case kOperationTransmitTdLinkCmd:
         FinishOperation();
         Get<DirectHandler>().HandleTdLinkCmdTxDone(aFrame, aAckFrame, aError);
+        Get<ThreadDirectTxScheduler>().ClearIfMacCommand();
         PerformNextOperation();
         break;
 #endif
@@ -1676,6 +1760,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
     case kOperationTransmitTdTeardown:
         FinishOperation();
         Get<DirectHandler>().HandleTdTeardownTxDone(aFrame, aError);
+        Get<ThreadDirectTxScheduler>().ClearIfMacCommand();
         PerformNextOperation();
         break;
 #endif
@@ -1684,6 +1769,7 @@ void Mac::HandleTransmitDone(TxFrame &aFrame, RxFrame *aAckFrame, Error aError)
     case kOperationTransmitTdSupervision:
         FinishOperation();
         Get<DirectHandler>().HandleSupervisionTxDone(aFrame, aError);
+        Get<ThreadDirectTxScheduler>().ClearIfMacCommand();
         PerformNextOperation();
         break;
 #endif
@@ -1749,7 +1835,13 @@ void Mac::HandleDirectTxTimer(void)
 
 bool Mac::ShouldStartThreadDirectTxNow(void) const
 {
-    return IsPending(kOperationTransmitDataDirectTd) && (TimerMicro::GetNow() >= mDirectTxFireTime);
+    bool shouldStart = false;
+
+    VerifyOrExit(TimerMicro::GetNow() >= mDirectTxFireTime);
+    shouldStart = ((mDelayedTdOperations & mPendingOperations) != 0);
+
+exit:
+    return shouldStart;
 }
 #endif
 
@@ -2244,6 +2336,13 @@ void Mac::HandleReceivedFrame(RxFrame *aFrame, Error aError)
         }
     }
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    if (srcaddr.IsExtended())
+    {
+        HandleThreadDirectPeerRx(srcaddr.GetExtended(), *aFrame);
+    }
+#endif
+
     switch (mOperation)
     {
     case kOperationActiveScan:
@@ -2418,21 +2517,6 @@ exit:
 void Mac::UpdateNeighborLinkInfo(Neighbor &aNeighbor, const RxFrame &aRxFrame)
 {
     LinkQuality oldLinkQuality = aNeighbor.GetLinkInfo().GetLinkQualityIn();
-
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
-    // Any successful TX (Enh-ACK received) or RX exchange with a linked Thread Direct peer
-    // resets its link supervision idle clock and refreshes the local SLW drift anchor,
-    // regardless of frame type.
-    {
-        DirectPeer *peer = Get<DirectPeerTable>().FindPeer(aNeighbor.GetExtAddress(), DirectPeer::kInStateValid);
-
-        if (peer != nullptr)
-        {
-            peer->SetLastActivityTime(TimerMilli::GetNow());
-            mLinks.GetSubMac().UpdateThreadDirectSlwSyncTimestamp(aRxFrame);
-        }
-    }
-#endif
 
     aNeighbor.GetLinkInfo().AddRss(aRxFrame.GetRssi());
 
@@ -2965,6 +3049,21 @@ Error Mac::UpdateThreadDirectPeerSca(const ExtAddress &aExtAddress, const ScaPar
     return Get<DirectPeerTable>().UpdateThreadDirectPeerSca(aExtAddress, aSca, aRxTimestamp);
 }
 
+void Mac::HandleThreadDirectPeerRx(const ExtAddress &aExtAddress, const RxFrame &aFrame, uint64_t aTxWindowStart)
+{
+    DirectPeer *peer = Get<DirectPeerTable>().FindPeer(aExtAddress, DirectPeer::kInStateValid);
+    uint64_t    activityUs;
+
+    VerifyOrExit(peer != nullptr);
+
+    activityUs = (aTxWindowStart != 0) ? aTxWindowStart : peer->AlignToSlwWindowStart(aFrame.GetTimestamp());
+    Get<DirectHandler>().HandlePeerActivity(*peer, activityUs);
+    mLinks.GetSubMac().UpdateThreadDirectSlwSyncTimestamp(aFrame);
+
+exit:
+    return;
+}
+
 Error Mac::UpdateThreadDirectPeerSlwAccuracy(const ExtAddress &aExtAddress, const CslAccuracy &aAccuracy)
 {
     return Get<DirectPeerTable>().UpdateThreadDirectPeerSlwAccuracy(aExtAddress, aAccuracy);
@@ -2972,7 +3071,8 @@ Error Mac::UpdateThreadDirectPeerSlwAccuracy(const ExtAddress &aExtAddress, cons
 
 Error Mac::CalculateThreadDirectTxSchedule(const Address          &aDestAddress,
                                            uint16_t                aFrameLength,
-                                           ThreadDirectTxSchedule &aSchedule) const
+                                           ThreadDirectTxSchedule &aSchedule,
+                                           uint64_t                aEarliestUs) const
 {
     Error       error = kErrorNone;
     DirectPeer *peer;
@@ -2986,8 +3086,9 @@ Error Mac::CalculateThreadDirectTxSchedule(const Address          &aDestAddress,
 
     aSchedule.mRequestAheadUs = kDirectRequestAhead + CalculateRadioBusTransferTime(aFrameLength);
 
-    VerifyOrExit(peer->GetNextSlwWindowStart(Get<Radio>().GetNow(), aSchedule.mRequestAheadUs, nextWindowStart),
-                 error = kErrorNotFound);
+    VerifyOrExit(
+        peer->GetNextSlwWindowStart(Get<Radio>().GetNow(), aSchedule.mRequestAheadUs, aEarliestUs, nextWindowStart),
+        error = kErrorNotFound);
 
     txDelay = nextWindowStart - peer->GetLastScaRxTimestamp();
 
@@ -3008,17 +3109,16 @@ void Mac::ApplyThreadDirectTxSchedule(TxFrame &aFrame, const ThreadDirectTxSched
     aFrame.SetTxDelay(aSchedule.mTxDelay);
     aFrame.SetTxDelayBaseTime(aSchedule.mTxDelayBaseTime);
 
-    // Patch the SCA LTV phase in the frame to the accurate TX-time value.
-    // Build time uses the current radio clock; here we use the actual scheduled TX time,
-    // giving the peer a precise time-to-next-window instead of ~1 full period.
+    // Patch the SCA LTV with the phase/RAM pair at the scheduled MAC-header time
+    // so the peer reconstructs this device's sample from the RX timestamp.
     {
-        uint32_t slotDurationUs = Get<DirectHandler>().GetSlwSlotDurationUs();
-        uint16_t txPhase =
-            Get<SubMac>().ComputeSlwPhaseSlotsAt(static_cast<uint32_t>(aSchedule.mWindowStart), slotDurationUs);
+        uint16_t phaseSlots  = 0;
+        int16_t  ramOffsetUs = 0;
 
-        if (txPhase > 0)
+        if (Get<SubMac>().ComputeSlwPhaseAndRamOffsetAt(static_cast<uint32_t>(aSchedule.mWindowStart), phaseSlots,
+                                                        ramOffsetUs))
         {
-            aFrame.SetScaLtvPhase(txPhase);
+            aFrame.SetScaLtvPhaseAndRamOffset(phaseSlots, ramOffsetUs);
         }
     }
 }

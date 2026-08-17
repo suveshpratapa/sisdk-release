@@ -29,6 +29,7 @@
 #include "mac_frame.h"
 
 #include <assert.h>
+#include <string.h>
 
 #include <openthread/platform/radio.h>
 
@@ -580,7 +581,7 @@ otError otMacFrameProcessTxSfd(otRadioFrame *aFrame, uint64_t aRadioTime, otRadi
 #endif
 #if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE) && \
     (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    if (aRadioContext->mSlwPresent)
+    if (aRadioContext->mSlwPresent && !aFrame->mInfo.mTxInfo.mIsSecurityProcessed)
     {
         otMacFrameSetThreadDirectScaLtv(aFrame, aRadioContext->mSlwPeriod,
                                         ComputeSlwPhase(static_cast<uint32_t>(aRadioTime), aRadioContext),
@@ -639,11 +640,8 @@ bool otMacFrameIsTdLinkCommand(const otRadioFrame *aFrame)
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 void otMacFrameSetScaLtvPhase(otRadioFrame *aFrame, uint16_t aPhase)
 {
-    static_cast<Mac::TxFrame *>(aFrame)->SetScaLtvPhase(aPhase);
+    static_cast<Mac::TxFrame *>(aFrame)->SetScaLtvPhaseAndRamOffset(aPhase, 0);
 }
-#endif
-
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
 
 bool otMacFrameIsTdWakeCommand(otRadioFrame *aFrame)
 {
@@ -661,9 +659,10 @@ bool otMacFrameIsTdWakeCommand(otRadioFrame *aFrame)
            (keyId >= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MIN && keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX);
 }
 
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-
-uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8_t *aDest, uint8_t aDestLen)
+uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame              *aFrame,
+                                               uint8_t                         *aDest,
+                                               uint8_t                          aDestLen,
+                                               const otMacFrameThreadDirectSca *aSca)
 {
     using namespace ot;
     using namespace ot::Mac;
@@ -673,46 +672,64 @@ uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8
     const Frame   &rxFrame  = *static_cast<const Frame *>(aFrame);
     const uint8_t *threadIe = rxFrame.GetHeaderIe(ThreadHeaderIe::kElementId);
     uint8_t        written  = 0;
+    ChallengeLtv   challenge;
+    bool           hasChallenge = false;
+    bool           hasSca       = (aSca != nullptr) && aSca->mHasSlw;
 
-    if (threadIe == nullptr)
+    if (threadIe != nullptr)
     {
-        return 0;
-    }
+        uint8_t                   ieLen = reinterpret_cast<const HeaderIe *>(threadIe)->GetLength();
+        PackedLtvStream::Iterator iter;
 
-    uint8_t ieLen = reinterpret_cast<const HeaderIe *>(threadIe)->GetLength();
+        iter.Init(threadIe + sizeof(HeaderIe), ieLen);
 
-    // Scan the incoming frame's packed LTV stream directly — no scratch buffer needed.
-    ChallengeLtv              challenge;
-    bool                      found = false;
-    PackedLtvStream::Iterator iter;
-
-    iter.Init(threadIe + sizeof(HeaderIe), ieLen);
-
-    while (!iter.IsDone())
-    {
-        if (iter.GetType() == ChallengeLtvInfo::kType && iter.GetLength() == sizeof(ChallengeLtv))
+        while (!iter.IsDone())
         {
-            memcpy(&challenge, iter.GetValue(), sizeof(ChallengeLtv));
-            found = true;
-            break;
-        }
+            if (iter.GetType() == ChallengeLtvInfo::kType && iter.GetLength() == sizeof(ChallengeLtv))
+            {
+                memcpy(&challenge, iter.GetValue(), sizeof(ChallengeLtv));
+                hasChallenge = true;
+                break;
+            }
 
-        IgnoreError(iter.Advance());
+            IgnoreError(iter.Advance());
+        }
     }
 
-    if (!found)
+    if (!hasChallenge && !hasSca)
     {
         return 0;
     }
 
-    uint8_t      plainOut[Ltv::kHeaderSize + sizeof(ChallengeLtv)];
-    uint8_t      packed[1 + sizeof(ChallengeLtv)];
-    uint8_t      ieBuf[sizeof(HeaderIe) + 1 + sizeof(ChallengeLtv)];
+    uint8_t      plainOut[OT_TD_ENH_ACK_IE_MAX_SIZE];
+    uint8_t      packed[OT_TD_ENH_ACK_IE_MAX_SIZE];
+    uint8_t      ieBuf[sizeof(HeaderIe) + OT_TD_ENH_ACK_IE_MAX_SIZE];
     FrameBuilder plainBuilder;
     FrameBuilder ieBuilder;
 
     plainBuilder.Init(plainOut, sizeof(plainOut));
-    IgnoreError(AppendChallengeLtv(plainBuilder, challenge));
+
+    if (hasChallenge)
+    {
+        IgnoreError(AppendChallengeLtv(plainBuilder, challenge));
+    }
+
+    if (hasSca)
+    {
+        ScaParams scaParams;
+
+        memset(&scaParams, 0, sizeof(scaParams));
+        scaParams.mHasSlw           = true;
+        scaParams.mHasClockAccuracy = true;
+        scaParams.mSlwPeriodSlots   = aSca->mSlwPeriod;
+        scaParams.mSlwPhaseSlots    = aSca->mSlwPhase;
+        scaParams.mRamOffsetUs      = aSca->mRamOffsetUs;
+        scaParams.mClockAccuracy    = aSca->mClockAccuracy;
+        scaParams.mUncertainty      = aSca->mUncertainty;
+        scaParams.mSlotDuration     = ScaSlotDuration::k625Usec;
+        scaParams.mRamAvailable     = false;
+        IgnoreError(AppendScaLtv(plainBuilder, scaParams));
+    }
 
     uint8_t packedLen =
         PackedLtvStream::Encode(plainOut, static_cast<uint8_t>(plainBuilder.GetLength()), packed, sizeof(packed));
@@ -731,3 +748,6 @@ uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8
 
     return written;
 }
+
+#endif // #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE ||
+       // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE

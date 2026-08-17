@@ -28,9 +28,9 @@
 
 /**
  * @file
- *   This file tests Thread Direct link supervision: Supervision Interval negotiation,
- *   idle-triggered keepalive probes, retry-based link loss detection and recovery, and
- *   SCA LTV delivery on ordinary data frames.
+ *   This file tests Thread Direct link supervision: peer-advertised intervals,
+ *   winner-sends probing, idle-triggered keepalive probes, retry-based link loss
+ *   detection and recovery, and SCA LTV delivery on ordinary data frames.
  */
 
 #include <stdio.h>
@@ -39,12 +39,14 @@
 #include <openthread/thread_direct.h>
 
 #include "mac/direct_handler.hpp"
+#include "mac/mac.hpp"
 #include "net/ip6.hpp"
 #include "net/udp6.hpp"
 #include "platform/nexus_core.hpp"
 #include "platform/nexus_node.hpp"
 #include "thread/direct_peer_table.hpp"
 #include "thread/mle.hpp"
+#include "thread/thread_direct_tx_scheduler.hpp"
 
 namespace ot {
 namespace Nexus {
@@ -108,31 +110,48 @@ static void HandleUdpReceive(void *aContext, otMessage *aMessage, const otMessag
     static_cast<UdpRxInfo *>(aContext)->mRxCount++;
 }
 
-// Returns the minimum of two Supervision Interval values, treating 0 (no requirement) as
-// deferring entirely to the other side -- the same rule `DirectHandler` applies internally.
-static uint32_t EffectiveSupervisionIntervalMs(uint32_t aLocalMs, uint32_t aPeerMs)
+void ConfigureLinkedPair(Core        &aNexus,
+                         Node        &aWi,
+                         Node        &aWl,
+                         TdEventInfo &aWiEvents,
+                         TdEventInfo &aWlEvents,
+                         uint32_t     aWiIntervalMs,
+                         uint32_t     aWlIntervalMs)
 {
-    uint32_t effectiveMs;
+    otNetworkKey networkKey;
 
-    if (aPeerMs == 0)
-    {
-        effectiveMs = aLocalMs;
-    }
-    else if (aLocalMs == 0)
-    {
-        effectiveMs = aPeerMs;
-    }
-    else
-    {
-        effectiveMs = (aLocalMs < aPeerMs) ? aLocalMs : aPeerMs;
-    }
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
 
-    return effectiveMs;
+    SuccessOrQuit(otThreadSetNetworkKey(&aWi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&aWl.GetInstance(), &networkKey));
+    SuccessOrQuit(otLinkSetPanId(&aWi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&aWl.GetInstance(), kPanId));
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&aWi.GetInstance(), aWiIntervalMs));
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&aWl.GetInstance(), aWlIntervalMs));
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&aWi.GetInstance(), kSlwPeriodSlots));
+    SuccessOrQuit(otThreadDirectSetSlwSchedule(&aWl.GetInstance(), kSlwPeriodSlots));
+    SuccessOrQuit(otIp6SetEnabled(&aWi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&aWl.GetInstance(), true));
+
+    aNexus.AdvanceTime(100);
+
+    otThreadDirectSetEventCallback(&aWi.GetInstance(), HandleTdEvent, &aWiEvents);
+    otThreadDirectSetEventCallback(&aWl.GetInstance(), HandleTdEvent, &aWlEvents);
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&aWl.GetInstance(), true));
+
+    aNexus.AdvanceTime(100);
+
+    SuccessOrQuit(otThreadDirectWakeup(&aWi.GetInstance(),
+                                       reinterpret_cast<const otExtAddress *>(&aWl.mRadio.mExtAddress),
+                                       OT_THREAD_DIRECT_WAKE_TYPE_LINK, 0, 0, 0));
+    aNexus.AdvanceTime(kHandshakeTimeMs + 2 * kSlwPeriodMs);
+
+    VerifyOrQuit(aWiEvents.mLinkedCount == 1);
+    VerifyOrQuit(aWlEvents.mLinkedCount == 1);
 }
 
-// WI configures a longer local Supervision Interval than WL; verifies the effective interval
-// negotiated for the link -- the minimum of the two peers' advertised values -- resolves to
-// WL's shorter value on both sides.
+// Each peer advertises its own Supervision Interval. After the handshake, each side
+// stores the peer's advertised value (decoded from the sender's SLW period count).
 void TestTdSupervisionNegotiation(void)
 {
     static constexpr uint32_t kWiIntervalMs = 2000;
@@ -219,17 +238,353 @@ void TestTdSupervisionNegotiation(void)
 
     VerifyOrQuit(wiViewOfWl->GetSupervisionIntervalMs() == kWlIntervalMs);
     VerifyOrQuit(wlViewOfWi->GetSupervisionIntervalMs() == kWiIntervalMs);
+}
+
+// A timeout that is not a multiple of the local SLW period is advertised and timed
+// as the rounded-down period count. GetSlwTimeout() still returns the configured ms.
+void TestTdSupervisionQuantizedInterval(void)
+{
+    static constexpr uint32_t kConfiguredMs = 750;
+    static constexpr uint32_t kQuantizedMs  = kSlwPeriodMs;
+    static constexpr uint32_t kPeerMs       = 2000;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
 
     Log("---------------------------------------------------------------------------------------");
-    Log("Step 6: Verify the effective interval -- min(local, peer) -- resolves to 500 ms on both sides");
+    Log("Link with WI at 750 ms (1.5 SLW periods) and WL at 2000 ms");
 
-    uint32_t wiEffectiveMs = EffectiveSupervisionIntervalMs(otThreadDirectGetSlwTimeout(&wi.GetInstance()),
-                                                            wiViewOfWl->GetSupervisionIntervalMs());
-    uint32_t wlEffectiveMs = EffectiveSupervisionIntervalMs(otThreadDirectGetSlwTimeout(&wl.GetInstance()),
-                                                            wlViewOfWi->GetSupervisionIntervalMs());
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, kConfiguredMs, kPeerMs);
 
-    VerifyOrQuit(wiEffectiveMs == kWlIntervalMs);
-    VerifyOrQuit(wlEffectiveMs == kWlIntervalMs);
+    DirectPeer *wlViewOfWi = wl.Get<DirectPeerTable>().FindPeer(wi.mRadio.mExtAddress, DirectPeer::kInStateValid);
+
+    VerifyOrQuit(wlViewOfWi != nullptr);
+    VerifyOrQuit(otThreadDirectGetSlwTimeout(&wi.GetInstance()) == kConfiguredMs);
+    VerifyOrQuit(wlViewOfWi->GetSupervisionIntervalMs() == kQuantizedMs);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("WI probes at the quantized 500 ms cadence, not the configured 750 ms");
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        TimeMilli beforeWl = wlViewOfWi->GetLastActivityTime();
+
+        nexus.AdvanceTime(kQuantizedMs + kSlwPeriodMs);
+
+        VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlViewOfWi->GetSupervisionProbeAttempts() == 0);
+        VerifyOrQuit(wlViewOfWi->GetLastActivityTime() > beforeWl);
+    }
+}
+
+// The shorter local interval transmits probes. The longer peer's timer is reset by RX
+// and never fires. Lowering the longer peer's interval mid-link flips the sender.
+void TestTdSupervisionWinnerSends(void)
+{
+    static constexpr uint32_t kLongIntervalMs  = 2000;
+    static constexpr uint32_t kShortIntervalMs = 500;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Link with WL at 500 ms and WI at 2000 ms; only WL transmits probes");
+
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, kLongIntervalMs, kShortIntervalMs);
+
+    DirectPeer *wiViewOfWl = wi.Get<DirectPeerTable>().FindPeer(wl.mRadio.mExtAddress, DirectPeer::kInStateValid);
+    DirectPeer *wlViewOfWi = wl.Get<DirectPeerTable>().FindPeer(wi.mRadio.mExtAddress, DirectPeer::kInStateValid);
+
+    VerifyOrQuit(wiViewOfWl != nullptr);
+    VerifyOrQuit(wlViewOfWi != nullptr);
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        TimeMilli beforeWi = wiViewOfWl->GetLastActivityTime();
+
+        nexus.AdvanceTime(kShortIntervalMs + kSlwPeriodMs);
+
+        VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wiViewOfWl->GetSupervisionProbeAttempts() == 0);
+        VerifyOrQuit(wiViewOfWl->GetLastActivityTime() > beforeWi);
+    }
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Lower WI's interval below WL's; WI becomes the sender");
+
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&wi.GetInstance(), kShortIntervalMs));
+    SuccessOrQuit(otThreadDirectSetSlwTimeout(&wl.GetInstance(), kLongIntervalMs));
+    wlViewOfWi->ResetSupervisionProbeAttempts();
+
+    for (uint8_t i = 0; i < 4; i++)
+    {
+        TimeMilli beforeWl = wlViewOfWi->GetLastActivityTime();
+
+        // New sender: up to one local interval from last activity, then SLW delay.
+        nexus.AdvanceTime(kShortIntervalMs + 2 * kSlwPeriodMs);
+
+        VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlViewOfWi->GetSupervisionProbeAttempts() == 0);
+        VerifyOrQuit(wlViewOfWi->GetLastActivityTime() > beforeWl);
+    }
+}
+
+// Equal local intervals: a queued probe is dropped when the peer's probe (or ACK)
+// arrives, so only one side transmits after the first cycle.
+void TestTdSupervisionEqualIntervalOneSender(void)
+{
+    static constexpr uint32_t kIntervalMs = 500;
+    static constexpr uint8_t  kCycles     = 8;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+    uint8_t     wiSends = 0;
+    uint8_t     wlSends = 0;
+    TimeMilli   lastWiProbe;
+    TimeMilli   lastWlProbe;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Link with both sides at 500 ms; incoming activity cancels a queued probe");
+
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, kIntervalMs, kIntervalMs);
+
+    DirectPeer *wiViewOfWl = wi.Get<DirectPeerTable>().FindPeer(wl.mRadio.mExtAddress, DirectPeer::kInStateValid);
+    DirectPeer *wlViewOfWi = wl.Get<DirectPeerTable>().FindPeer(wi.mRadio.mExtAddress, DirectPeer::kInStateValid);
+
+    VerifyOrQuit(wiViewOfWl != nullptr);
+    VerifyOrQuit(wlViewOfWi != nullptr);
+
+    lastWiProbe = wiViewOfWl->GetLastSupervisionProbeTime();
+    lastWlProbe = wlViewOfWi->GetLastSupervisionProbeTime();
+
+    for (uint8_t i = 0; i < kCycles; i++)
+    {
+        nexus.AdvanceTime(kIntervalMs + kSlwPeriodMs);
+
+        VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
+        VerifyOrQuit(wiViewOfWl->GetSupervisionProbeAttempts() == 0);
+        VerifyOrQuit(wlViewOfWi->GetSupervisionProbeAttempts() == 0);
+
+        if (wiViewOfWl->GetLastSupervisionProbeTime() > lastWiProbe)
+        {
+            lastWiProbe = wiViewOfWl->GetLastSupervisionProbeTime();
+            wiSends++;
+        }
+
+        if (wlViewOfWi->GetLastSupervisionProbeTime() > lastWlProbe)
+        {
+            lastWlProbe = wlViewOfWi->GetLastSupervisionProbeTime();
+            wlSends++;
+        }
+    }
+
+    VerifyOrQuit((wiSends + wlSends) >= 4);
+
+    if (memcmp(wi.mRadio.mExtAddress.m8, wl.mRadio.mExtAddress.m8, OT_EXT_ADDRESS_SIZE) < 0)
+    {
+        VerifyOrQuit(wiSends >= 4);
+        VerifyOrQuit(wlSends == 0);
+    }
+    else
+    {
+        VerifyOrQuit(wlSends >= 4);
+        VerifyOrQuit(wiSends == 0);
+    }
+}
+
+// Failed probes retry at the local supervision interval, not the SLW period.
+void TestTdSupervisionRetryCadence(void)
+{
+    static constexpr uint32_t kIntervalMs = 2 * kSlwPeriodMs;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, kIntervalMs, kIntervalMs);
+
+    DirectPeer *wiViewOfWl = wi.Get<DirectPeerTable>().FindPeer(wl.mRadio.mExtAddress, DirectPeer::kInStateValid);
+    DirectPeer *wlViewOfWi = wl.Get<DirectPeerTable>().FindPeer(wi.mRadio.mExtAddress, DirectPeer::kInStateValid);
+
+    VerifyOrQuit(wiViewOfWl != nullptr);
+    VerifyOrQuit(wlViewOfWi != nullptr);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Block WL and confirm failed probes are paced at the local interval");
+
+    wl.Get<Mac::Mac>().SetRadioFilterEnabled(true);
+    nexus.AdvanceTime(kIntervalMs + kSlwPeriodMs);
+
+    {
+        uint8_t attempts = wiViewOfWl->GetSupervisionProbeAttempts();
+
+        if (wlViewOfWi->GetSupervisionProbeAttempts() > attempts)
+        {
+            attempts = wlViewOfWi->GetSupervisionProbeAttempts();
+        }
+
+        VerifyOrQuit(attempts >= 1);
+        VerifyOrQuit(attempts <= 2);
+
+        nexus.AdvanceTime(2 * kIntervalMs);
+
+        attempts = wiViewOfWl->GetSupervisionProbeAttempts();
+
+        if (wlViewOfWi->GetSupervisionProbeAttempts() > attempts)
+        {
+            attempts = wlViewOfWi->GetSupervisionProbeAttempts();
+        }
+
+        VerifyOrQuit(attempts >= 2);
+        VerifyOrQuit(attempts <= 4);
+    }
+
+    VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+    VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
+    wl.Get<Mac::Mac>().SetRadioFilterEnabled(false);
+}
+
+// Enh-Ack of a probe carries SCA LTV, including clock accuracy.
+void TestTdSupervisionEnhAckSca(void)
+{
+    static constexpr uint32_t kIntervalMs     = 500;
+    static constexpr uint8_t  kExpectedPpm    = 20;
+    static constexpr uint8_t  kExpectedUncert = 10;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, kIntervalMs, kIntervalMs);
+
+    DirectPeer *wiViewOfWl = wi.Get<DirectPeerTable>().FindPeer(wl.mRadio.mExtAddress, DirectPeer::kInStateValid);
+    DirectPeer *wlViewOfWi = wl.Get<DirectPeerTable>().FindPeer(wi.mRadio.mExtAddress, DirectPeer::kInStateValid);
+
+    VerifyOrQuit(wiViewOfWl != nullptr);
+    VerifyOrQuit(wlViewOfWi != nullptr);
+
+    nexus.AdvanceTime(2 * kIntervalMs + kSlwPeriodMs);
+
+    VerifyOrQuit(wiViewOfWl->GetSlwAccuracy().GetClockAccuracy() == kExpectedPpm);
+    VerifyOrQuit(wiViewOfWl->GetSlwAccuracy().GetUncertainty() == kExpectedUncert);
+    VerifyOrQuit(wlViewOfWi->GetSlwAccuracy().GetClockAccuracy() == kExpectedPpm);
+    VerifyOrQuit(wlViewOfWi->GetSlwAccuracy().GetUncertainty() == kExpectedUncert);
+}
+
+// Delayed MAC commands leave the MAC idle until the scheduled fire time.
+void TestTdSupervisionDelayedSubmit(void)
+{
+    static constexpr uint32_t kIntervalMs = 500;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+    nexus.AdvanceTime(0);
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    ConfigureLinkedPair(nexus, wi, wl, wiEvents, wlEvents, 2000, kIntervalMs);
+
+    // Advance just past WL's local interval so a probe is queued, but not far enough
+    // that the delayed TX fire time must already have been reached.
+    nexus.AdvanceTime(kIntervalMs);
+
+    if (wl.Get<ThreadDirectTxScheduler>().IsPending())
+    {
+        VerifyOrQuit(wl.Get<Mac::Mac>().IsIdle() ||
+                     (TimerMicro::GetNow() >= wl.Get<Mac::Mac>().GetThreadDirectTxFireTime()));
+    }
+
+    VerifyOrQuit(wiEvents.mUnlinkedCount == 0);
+    VerifyOrQuit(wlEvents.mUnlinkedCount == 0);
 }
 
 // With no application traffic at all for several Supervision Intervals, the idle-triggered
@@ -318,7 +673,7 @@ void TestTdSupervisionIdleKeepalive(void)
     Log("---------------------------------------------------------------------------------------");
     Log("Step 4: Advance time with zero application traffic across several Supervision Intervals,");
     Log("        checking after each checkpoint that keepalive probes are succeeding and no side");
-    Log("        has gone idle beyond the negotiated interval");
+    Log("        has gone idle beyond the local supervision interval");
 
     for (uint8_t i = 0; i < kNumCheckpoints; i++)
     {
@@ -459,12 +814,10 @@ void TestTdSupervisionGracePeriod(void)
 void TestTdSupervisionHardLossAndRecovery(void)
 {
     static constexpr uint32_t kSupervisionIntervalMs = 2 * kSlwPeriodMs;
-    // Initial idle deadline, plus `kMaxSupervisionFailures` fast retries. Each retry is
-    // paced at roughly one SLW window, but when the sender's own radio is functional and
-    // separately waits out the peer's next window before transmitting, the two delays can
-    // add up to roughly two SLW windows per attempt; size the outage for that worst case
-    // plus margin.
-    static constexpr uint32_t kOutageMs = kSupervisionIntervalMs + 2 * 8 * kSlwPeriodMs;
+    // Initial idle deadline plus `kMaxSupervisionFailures` retries, each paced at the
+    // local supervision interval plus one SLW period of submit delay.
+    static constexpr uint32_t kOutageMs =
+        (DirectHandler::kMaxSupervisionFailures + 2) * (kSupervisionIntervalMs + kSlwPeriodMs);
 
     Core nexus;
 
@@ -720,6 +1073,35 @@ int main(void)
            (getenv("OT_NEXUS_PCAP_FILE_NEGOTIATION") ? getenv("OT_NEXUS_PCAP_FILE_NEGOTIATION") : ""),
            /*overwrite=*/1);
     ot::Nexus::TestTdSupervisionNegotiation();
+
+    setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_QUANTIZED") ? getenv("OT_NEXUS_PCAP_FILE_QUANTIZED") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionQuantizedInterval();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_WINNER_SENDS") ? getenv("OT_NEXUS_PCAP_FILE_WINNER_SENDS") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionWinnerSends();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_EQUAL_INTERVAL") ? getenv("OT_NEXUS_PCAP_FILE_EQUAL_INTERVAL") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionEqualIntervalOneSender();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_RETRY_CADENCE") ? getenv("OT_NEXUS_PCAP_FILE_RETRY_CADENCE") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionRetryCadence();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_ENHACK_SCA") ? getenv("OT_NEXUS_PCAP_FILE_ENHACK_SCA") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionEnhAckSca();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_DELAYED_SUBMIT") ? getenv("OT_NEXUS_PCAP_FILE_DELAYED_SUBMIT") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdSupervisionDelayedSubmit();
 
     setenv("OT_NEXUS_PCAP_FILE",
            (getenv("OT_NEXUS_PCAP_FILE_IDLE_KEEPALIVE") ? getenv("OT_NEXUS_PCAP_FILE_IDLE_KEEPALIVE") : ""),

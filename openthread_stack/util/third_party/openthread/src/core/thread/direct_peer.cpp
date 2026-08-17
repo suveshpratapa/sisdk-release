@@ -69,6 +69,12 @@ void DirectPeer::SetSca(const Mac::ScaParams &aSca)
     mSlwPhaseUs        = mSlwSlotDurationUs * aSca.mSlwPhaseSlots;
     mSlwPeriodSlots    = aSca.mSlwPeriodSlots;
     mSlwPhaseSlots     = aSca.mSlwPhaseSlots;
+
+    if (aSca.mHasClockAccuracy)
+    {
+        mSlwAccuracy.SetClockAccuracy(aSca.mClockAccuracy);
+        mSlwAccuracy.SetUncertainty(aSca.mUncertainty);
+    }
 }
 
 void DirectPeer::UpdateSca(const Mac::ScaParams &aSca, uint64_t aRxTimestamp)
@@ -77,7 +83,10 @@ void DirectPeer::UpdateSca(const Mac::ScaParams &aSca, uint64_t aRxTimestamp)
     SetLastScaRxTimestamp(aRxTimestamp);
 }
 
-bool DirectPeer::GetNextSlwWindowStart(uint64_t aRadioNow, uint32_t aAheadUs, uint64_t &aWindowStartTime) const
+bool DirectPeer::GetNextSlwWindowStart(uint64_t  aRadioNow,
+                                       uint32_t  aAheadUs,
+                                       uint64_t  aEarliestUs,
+                                       uint64_t &aWindowStartTime) const
 {
     bool     hasWindow = false;
     uint64_t firstWindowStart;
@@ -99,8 +108,8 @@ bool DirectPeer::GetNextSlwWindowStart(uint64_t aRadioNow, uint32_t aAheadUs, ui
     }
 
     firstWindowStart += mSlwPhaseUs;
-    minWindowStart   = aRadioNow + aAheadUs;
     aWindowStartTime = firstWindowStart;
+    minWindowStart   = aRadioNow + aAheadUs;
 
     if (aWindowStartTime < minWindowStart)
     {
@@ -116,10 +125,97 @@ bool DirectPeer::GetNextSlwWindowStart(uint64_t aRadioNow, uint32_t aAheadUs, ui
         }
     }
 
+    if (aEarliestUs != 0)
+    {
+        if (aWindowStartTime < aEarliestUs)
+        {
+            uint64_t extraPeriods;
+
+            extraPeriods = (aEarliestUs - aWindowStartTime) / mSlwPeriodUs;
+            aWindowStartTime += extraPeriods * mSlwPeriodUs;
+
+            if (aWindowStartTime < aEarliestUs)
+            {
+                aWindowStartTime += mSlwPeriodUs;
+            }
+        }
+    }
+
     hasWindow = true;
 
 exit:
     return hasWindow;
+}
+
+uint64_t DirectPeer::AlignToSlwWindowStart(uint64_t aRadioTime) const
+{
+    uint64_t nextWindowStart;
+
+    VerifyOrExit(GetNextSlwWindowStart(aRadioTime, /* aAheadUs */ 0, /* aEarliestUs */ 0, nextWindowStart));
+
+    if ((nextWindowStart > aRadioTime) && (nextWindowStart >= mSlwPeriodUs))
+    {
+        uint64_t prevWindowStart = nextWindowStart - mSlwPeriodUs;
+
+        if (aRadioTime >= prevWindowStart)
+        {
+            aRadioTime = prevWindowStart;
+        }
+        else if (prevWindowStart >= mSlwPeriodUs)
+        {
+            aRadioTime = prevWindowStart - mSlwPeriodUs;
+        }
+        else
+        {
+            aRadioTime = nextWindowStart;
+        }
+    }
+    else
+    {
+        aRadioTime = nextWindowStart;
+    }
+
+exit:
+    return aRadioTime;
+}
+
+uint64_t DirectPeer::SnapToNearestSlwWindowStart(uint64_t aRadioTime) const
+{
+    uint64_t nextWindowStart;
+    uint64_t nearest = aRadioTime;
+
+    VerifyOrExit(GetNextSlwWindowStart(aRadioTime, /* aAheadUs */ 0, /* aEarliestUs */ 0, nextWindowStart));
+
+    nearest = nextWindowStart;
+
+    if ((nextWindowStart > aRadioTime) && (nextWindowStart >= mSlwPeriodUs))
+    {
+        uint64_t prevWindowStart = nextWindowStart - mSlwPeriodUs;
+
+        if (aRadioTime >= prevWindowStart)
+        {
+            if ((aRadioTime - prevWindowStart) <= (nextWindowStart - aRadioTime))
+            {
+                nearest = prevWindowStart;
+            }
+        }
+        else if (prevWindowStart >= mSlwPeriodUs)
+        {
+            uint64_t olderWindowStart = prevWindowStart - mSlwPeriodUs;
+
+            if ((prevWindowStart - aRadioTime) <= (aRadioTime - olderWindowStart))
+            {
+                nearest = prevWindowStart;
+            }
+            else
+            {
+                nearest = olderWindowStart;
+            }
+        }
+    }
+
+exit:
+    return nearest;
 }
 
 void DirectPeer::Clear(void)

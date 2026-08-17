@@ -460,6 +460,9 @@ ot_nexus_test(td_link_handshake "thread_direct;nexus")
 ot_nexus_test(td_tx_scheduler "thread_direct;nexus")
 ot_nexus_test(td_supervision "thread_direct;nexus")
 
+ot_nexus_test(td_cli_state "thread_direct;nexus")
+target_link_libraries(nexus_td_cli_state PRIVATE openthread-cli-ftd)
+
 # Live Demo Persistent Server
 if(EMSCRIPTEN)
     set(NEXUS_WASM_LINK_OPTIONS

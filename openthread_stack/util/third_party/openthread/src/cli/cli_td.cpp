@@ -279,12 +279,19 @@ otError ThreadDirect::ProcessLinkState(Arg aArgs[])
 {
     otError                error = OT_ERROR_NONE;
     otThreadDirectLocalSca sca;
+    bool                   hasLinkedPeer;
 
     OT_UNUSED_VARIABLE(aArgs);
 
+    hasLinkedPeer = AsCoreType(GetInstancePtr()).Get<DirectPeerTable>().HasPeers(Neighbor::kInStateValid);
+
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
     OutputLine("role:  wi");
-    if (otThreadDirectIsWakeBurstActive(GetInstancePtr()))
+    if (hasLinkedPeer)
+    {
+        OutputLine("state: linked");
+    }
+    else if (otThreadDirectIsWakeBurstActive(GetInstancePtr()))
     {
         OutputLine("state: waking");
     }
@@ -294,7 +301,11 @@ otError ThreadDirect::ProcessLinkState(Arg aArgs[])
     }
 #elif OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     OutputLine("role:  wl");
-    if (otThreadDirectIsWakeListenerEnabled(GetInstancePtr()))
+    if (hasLinkedPeer)
+    {
+        OutputLine("state: linked");
+    }
+    else if (otThreadDirectIsWakeListenerEnabled(GetInstancePtr()))
     {
         OutputLine("state: listening");
     }
@@ -335,9 +346,15 @@ otError ThreadDirect::ProcessLinkPeers(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
 
-    uint32_t localIntervalMs = otThreadDirectGetSlwTimeout(GetInstancePtr());
+    uint32_t         localIntervalMs = otThreadDirectGetSlwTimeout(GetInstancePtr());
+    DirectPeerTable &peerTable       = AsCoreType(GetInstancePtr()).Get<DirectPeerTable>();
 
-    for (const DirectPeer &peer : AsCoreType(GetInstancePtr()).Get<DirectPeerTable>().Iterate(Neighbor::kInStateValid))
+    if (!peerTable.HasPeers(Neighbor::kInStateValid))
+    {
+        OutputLine("no peers");
+    }
+
+    for (const DirectPeer &peer : peerTable.Iterate(Neighbor::kInStateValid))
     {
         {
             const Mac::ExtAddress &a = peer.GetExtAddress();
@@ -359,24 +376,9 @@ otError ThreadDirect::ProcessLinkPeers(Arg aArgs[])
 
         {
             uint32_t peerIntervalMs = peer.GetSupervisionIntervalMs();
-            uint32_t effectiveMs;
 
-            if (peerIntervalMs == 0)
-            {
-                effectiveMs = localIntervalMs;
-            }
-            else if (localIntervalMs == 0)
-            {
-                effectiveMs = peerIntervalMs;
-            }
-            else
-            {
-                effectiveMs = (localIntervalMs < peerIntervalMs) ? localIntervalMs : peerIntervalMs;
-            }
-
-            OutputLine("  supervision: local=%lu peer=%lu effective=%lu failures=%u/%u",
-                       static_cast<unsigned long>(localIntervalMs), static_cast<unsigned long>(peerIntervalMs),
-                       static_cast<unsigned long>(effectiveMs),
+            OutputLine("  supervision: local=%lu peer=%lu failures=%u/%u", static_cast<unsigned long>(localIntervalMs),
+                       static_cast<unsigned long>(peerIntervalMs),
                        static_cast<unsigned>(peer.GetSupervisionProbeAttempts()),
                        static_cast<unsigned>(DirectHandler::kMaxSupervisionFailures));
         }

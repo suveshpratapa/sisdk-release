@@ -2031,13 +2031,13 @@ static bool writeIeee802154EnhancedAck(sl_rail_handle_t          aRailHandle,
     otRadioFrame receivedFrame, enhAckFrame;
     uint8_t      enhAckPsdu[IEEE802154_MAX_LENGTH];
 
-// Thread Direct:
-// Challenge LTV needs to be extracted, which always lands within these bytes.
-// To echo Challenge LTV from TD link command, receive packet until termination IE i.e 56 bytes.
-// (1U (packet Length) + 2U (FC) + 1U (Seq#) + 2U (PAN) + 8U (DstAdr) + 8U (SrcAdr) + 6U (SecHdr) +
-// 2U (Thread Header IE) + 7 (packed SCA LTV) + 17 (packed challenge LTV) + 2U (termination IE) = 56 bytes
 #define EARLY_FRAME_PENDING_EXPECTED_BYTES (2U + 2U + 1U + 2U + 8U + 2U + 8U + 14U)
 #define FINAL_PACKET_LENGTH_WITH_IE (EARLY_FRAME_PENDING_EXPECTED_BYTES + OT_ACK_IE_MAX_SIZE + 1U)
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+// PHR + FCF + Seq + Dest PAN + Dest + Src + Aux Sec + Thread Header IE hdr
+// + packed SCA (9) + packed Challenge (17). Termination 2 is not required.
+#define TD_LINK_CMD_THROUGH_CHALLENGE (PHY_HEADER_SIZE + 2U + 1U + 2U + 8U + 8U + 6U + 2U + 9U + 17U)
+#endif
 
     otMacAddress     aSrcAddress;
     uint8_t          linkMetricsDataLen;
@@ -2072,41 +2072,50 @@ static bool writeIeee802154EnhancedAck(sl_rail_handle_t          aRailHandle,
     }
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
-    // The IE payload (Challenge LTV) arrives after DATA_REQUEST_COMMAND fires;
-    // spin-poll until the full frame is buffered before building the Enh-ACK.
-    if (otMacFrameIsSecurityEnabled(&receivedFrame) && otMacFrameIsKeyIdMode1(&receivedFrame))
+    // Challenge LTV arrives after DATA_REQUEST_COMMAND. Spin-wait only for
+    // handshake TD Link Commands (MAC Command + wake key). Post-link data and
+    // supervision frames have no Challenge; local SCA does not need this wait.
+    if (otMacFrameIsCommand(&receivedFrame) && otMacFrameIsSecurityEnabled(&receivedFrame)
+        && otMacFrameIsKeyIdMode1(&receivedFrame))
     {
         uint8_t keyId = otMacFrameGetKeyId(&receivedFrame);
 
         if (keyId >= OT_MAC_FRAME_WAKE_KEY_INDEX && keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX)
         {
             sl_rail_rx_packet_info_t liveInfo;
-            // Check if received packet is long enough to reach FINAL_PACKET_LENGTH_WITH_IE.
-            // No need to wait for CRC (2 bytes) to receive hence exclude it.
-            bool shouldWaitForHeaderIe =
-                (receivedFrame.mLength >= 2U)
-                && (receivedFrame.mLength - 2U + PHY_HEADER_SIZE >= FINAL_PACKET_LENGTH_WITH_IE);
+            uint8_t                  bytesNeeded = TD_LINK_CMD_THROUGH_CHALLENGE;
+
+            // Cap at on-air length minus CRC so a shorter command (no Challenge)
+            // cannot stall waiting for bytes that will never arrive.
+            if (receivedFrame.mLength >= 2U)
+            {
+                uint8_t fullMinusCrc = receivedFrame.mLength - 2U + PHY_HEADER_SIZE;
+
+                if (bytesNeeded > fullMinusCrc)
+                {
+                    bytesNeeded = fullMinusCrc;
+                }
+            }
 
             do
             {
                 sli_ot_radio_interface_rail_get_rx_incoming_packet_info(&liveInfo);
-            } while (shouldWaitForHeaderIe && liveInfo.packet_bytes > 0
-                     && liveInfo.packet_bytes < FINAL_PACKET_LENGTH_WITH_IE);
+            } while (liveInfo.packet_bytes > 0 && liveInfo.packet_bytes < bytesNeeded);
 
-            if (shouldWaitForHeaderIe && liveInfo.packet_bytes >= FINAL_PACKET_LENGTH_WITH_IE)
+            if (liveInfo.packet_bytes >= bytesNeeded)
             {
                 sl_rail_rx_packet_info_t limitedInfo = liveInfo;
 
-                limitedInfo.packet_bytes = FINAL_PACKET_LENGTH_WITH_IE;
+                limitedInfo.packet_bytes = bytesNeeded;
 
-                if (limitedInfo.first_portion_bytes > FINAL_PACKET_LENGTH_WITH_IE)
+                if (limitedInfo.first_portion_bytes > bytesNeeded)
                 {
-                    limitedInfo.first_portion_bytes = FINAL_PACKET_LENGTH_WITH_IE;
+                    limitedInfo.first_portion_bytes = bytesNeeded;
                     limitedInfo.p_last_portion_data = nullptr;
                 }
 
                 sli_ot_radio_interface_rail_copy_rx_packet(receivedPsdu, &limitedInfo);
-                *initialPktReadBytes = FINAL_PACKET_LENGTH_WITH_IE;
+                *initialPktReadBytes = bytesNeeded;
             }
         }
     }
@@ -2155,7 +2164,20 @@ static bool writeIeee802154EnhancedAck(sl_rail_handle_t          aRailHandle,
                                        rxTimestamp,
                                        packetInfoForEnhAck->packet_bytes,
                                        receivedFrame.mLength);
-#else
+#endif
+#if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE)
+    {
+        uint32_t ackShrDoneTime =
+            rxTimestamp - (packetInfoForEnhAck->packet_bytes * OT_RADIO_SYMBOL_TIME * 2)
+            + (PHY_HEADER_SIZE * OT_RADIO_SYMBOL_TIME * 2) + (receivedFrame.mLength * OT_RADIO_SYMBOL_TIME * 2)
+            + sli_ot_radio_interface_rail_get_rx_to_tx_timing() + (PHY_HEADER_SIZE * OT_RADIO_SYMBOL_TIME * 2)
+            + (SHR_SIZE * OT_RADIO_SYMBOL_TIME * 2);
+
+        sli_ot_radio_direct_update_enh_ack_ie(instance, &enhAckFrame, ackShrDoneTime);
+    }
+#endif
+#if !OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE && !OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE \
+    && !OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     OT_UNUSED_VARIABLE(rxTimestamp);
 #endif
 

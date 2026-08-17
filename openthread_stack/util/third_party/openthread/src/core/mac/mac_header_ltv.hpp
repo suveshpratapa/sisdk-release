@@ -65,13 +65,16 @@ struct ScaParams
     static constexpr int16_t kRamOffsetUsMin  = -1024;
     static constexpr int16_t kRamOffsetUsMax  = 1023;
 
-    uint16_t        mSlwPeriodSlots; ///< SLW period in slot-duration units (0 = rx-on-when-idle); valid when mHasSlw.
-    uint16_t        mSlwPhaseSlots;  ///< SLW phase in slot-duration units; valid when mHasSlw.
-    int16_t         mRamOffsetUs;    ///< RAM Offset in us, signed [-1024, 1023].
-    uint8_t         mRamDuration;    ///< Number of bits in mRamBits (0 = no change); valid when mRamAvailable.
-    ScaSlotDuration mSlotDuration;   ///< Slot duration code.
-    bool            mRamAvailable;   ///< True if RAM Duration and RAM Bits are present in the SCA LTV.
-    bool            mHasSlw;         ///< True if SLW Period and Phase are present in the SCA LTV.
+    uint16_t        mSlwPeriodSlots;   ///< SLW period in slot-duration units (0 = rx-on-when-idle); valid when mHasSlw.
+    uint16_t        mSlwPhaseSlots;    ///< SLW phase in slot-duration units; valid when mHasSlw.
+    int16_t         mRamOffsetUs;      ///< RAM Offset in us, signed [-1024, 1023].
+    uint8_t         mRamDuration;      ///< Number of bits in mRamBits (0 = no change); valid when mRamAvailable.
+    ScaSlotDuration mSlotDuration;     ///< Slot duration code.
+    uint8_t         mClockAccuracy;    ///< Clock accuracy in ppm; valid when mHasClockAccuracy.
+    uint8_t         mUncertainty;      ///< Clock uncertainty in 10 us units; valid when mHasClockAccuracy.
+    bool            mRamAvailable;     ///< True if RAM Duration and RAM Bits are present in the SCA LTV.
+    bool            mHasSlw;           ///< True if SLW Period and Phase are present in the SCA LTV.
+    bool            mHasClockAccuracy; ///< True if ClockAccuracy and Uncertainty are present in the SCA LTV.
     uint8_t         mRamBits[kRamBitsMaxBytes]; ///< RAM bitmap; ceil(mRamDuration/8) bytes valid when mRamAvailable.
 };
 

@@ -114,8 +114,8 @@ struct Radio
     bool             mWakeKeySet[kWakeKeyCount];
 #endif
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
-    static constexpr uint8_t kTdEnhAckIeMaxSize = 64;
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    static constexpr uint8_t kTdEnhAckIeMaxSize = OT_TD_ENH_ACK_IE_MAX_SIZE;
 #endif
 };
 

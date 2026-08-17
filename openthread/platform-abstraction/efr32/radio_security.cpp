@@ -96,6 +96,10 @@ extern otExtAddress sExtAddress[RADIO_EXT_ADDR_COUNT];
 
 extern "C" {
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+static void sli_ot_radio_security_store_wake_key_material(otMacKeyMaterial *aDest, const otMacKeyMaterial *aWakeKey);
+#endif
+
 void sli_ot_radio_security_init(void)
 {
     // Initialize security material for all instances
@@ -300,7 +304,17 @@ otError sli_ot_radio_security_process_transmit(otRadioFrame *aFrame, otInstance 
 
     if (keyId >= OT_MAC_FRAME_WAKE_KEY_INDEX)
     {
-        SuccessOrExit(error = sli_ot_radio_security_resolve_wake_transmit_key(instanceIndex, keyId, &keyMaterial));
+        error = sli_ot_radio_security_resolve_wake_transmit_key(instanceIndex, keyId, &keyMaterial);
+
+        if (error != OT_ERROR_NONE && aFrame->mInfo.mTxInfo.mAesKey != nullptr)
+        {
+            sli_ot_radio_security_store_wake_key_material(&sDefaultWakeKey[instanceIndex],
+                                                          aFrame->mInfo.mTxInfo.mAesKey);
+            keyMaterial = &sDefaultWakeKey[instanceIndex];
+            error       = OT_ERROR_NONE;
+        }
+
+        SuccessOrExit(error);
         frameCounter = &sMacKeys[instanceIndex].macFrameCounter;
     }
     else

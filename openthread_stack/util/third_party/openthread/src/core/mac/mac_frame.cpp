@@ -1212,17 +1212,20 @@ exit:
 const uint8_t *Frame::GetHeaderIe(uint8_t aIeId) const
 {
     uint16_t       index        = FindHeaderIeIndex();
-    uint16_t       payloadIndex = FindPayloadIndex();
+    uint8_t        footerLength = GetFooterLength();
     const uint8_t *header       = nullptr;
 
-    // `FindPayloadIndex()` verifies that Header IE(s) in frame (if present)
-    // are well-formed.
+    VerifyOrExit(index != kInvalidIndex);
 
-    VerifyOrExit((index != kInvalidIndex) && (payloadIndex != kInvalidIndex));
-
-    while (index < payloadIndex)
+    while (index + sizeof(HeaderIe) + footerLength <= mLength)
     {
-        const HeaderIe *ie = reinterpret_cast<const HeaderIe *>(&mPsdu[index]);
+        const HeaderIe *ie    = reinterpret_cast<const HeaderIe *>(&mPsdu[index]);
+        uint8_t         ieLen = ie->GetLength();
+
+        if (index + sizeof(HeaderIe) + ieLen + footerLength > mLength)
+        {
+            break;
+        }
 
         if (ie->GetId() == aIeId)
         {
@@ -1230,7 +1233,12 @@ const uint8_t *Frame::GetHeaderIe(uint8_t aIeId) const
             ExitNow();
         }
 
-        index += sizeof(HeaderIe) + ie->GetLength();
+        if (ie->GetId() == Termination2Ie::kHeaderIeId)
+        {
+            break;
+        }
+
+        index += sizeof(HeaderIe) + ieLen;
     }
 
 exit:
@@ -1825,10 +1833,11 @@ exit:
     return error;
 }
 
-void TxFrame::SetScaLtvPhase(uint16_t aPhase)
+void TxFrame::SetScaLtvPhaseAndRamOffset(uint16_t aPhase, int16_t aRamOffsetUs)
 {
-    // Bit 13 of the SCA LTV fixed header is the RAM-Available flag (wire format constant).
-    static constexpr uint8_t kScaRamAvailableBit = 13;
+    static constexpr uint16_t kScaRamOffsetShift  = 2;
+    static constexpr uint16_t kScaRamOffsetMask   = 0x07ffu;
+    static constexpr uint8_t  kScaRamAvailableBit = 13;
 
     uint8_t *ie = GetHeaderIe(ThreadHeaderIe::kElementId);
     VerifyOrExit(ie != nullptr);
@@ -1837,7 +1846,6 @@ void TxFrame::SetScaLtvPhase(uint16_t aPhase)
         uint8_t *ieContent = ie + sizeof(HeaderIe);
         uint8_t  ieLen     = static_cast<uint8_t>(reinterpret_cast<const HeaderIe *>(ie)->GetLength());
 
-        // Thread Header IE content is PackedLtvStream — use the iterator to locate the SCA LTV.
         PackedLtvStream::Iterator iter;
         iter.Init(ieContent, ieLen);
 
@@ -1847,19 +1855,23 @@ void TxFrame::SetScaLtvPhase(uint16_t aPhase)
             {
                 uint8_t  ltvLen   = iter.GetLength();
                 uint8_t *ltvVal   = ieContent + iter.GetValueOffset();
-                uint8_t  consumed = 2u; // skip fixed 2-byte SCA header
+                uint8_t  consumed = 2u;
+                uint16_t fixedHdr;
 
                 VerifyOrExit(ltvLen >= 2u);
 
-                bool ramAvailable = ((LittleEndian::ReadUint16(ltvVal) >> kScaRamAvailableBit) & 0x01u) != 0;
+                fixedHdr = LittleEndian::ReadUint16(ltvVal);
+                fixedHdr = static_cast<uint16_t>(
+                    (fixedHdr & ~(kScaRamOffsetMask << kScaRamOffsetShift)) |
+                    ((static_cast<uint16_t>(aRamOffsetUs) & kScaRamOffsetMask) << kScaRamOffsetShift));
+                LittleEndian::WriteUint16(fixedHdr, ltvVal);
 
-                if (ramAvailable && consumed < ltvLen)
+                if (((fixedHdr >> kScaRamAvailableBit) & 0x01u) != 0 && consumed < ltvLen)
                 {
                     uint8_t ramDur = ltvVal[consumed++];
                     consumed += (ramDur > 0u) ? static_cast<uint8_t>((ramDur + 7u) / 8u) : 0u;
                 }
 
-                // SLW field: 2-byte period followed by 2-byte phase.
                 VerifyOrExit(static_cast<uint8_t>(ltvLen - consumed) >= 4u);
                 LittleEndian::WriteUint16(aPhase, ltvVal + consumed + 2u);
                 ExitNow();

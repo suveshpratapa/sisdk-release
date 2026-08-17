@@ -80,9 +80,11 @@ public:
         sca.mRamAvailable         = false;
         SetSca(sca);
         mSlwAccuracy.Init();
-        mLastScaRxTimestamp       = 0;
-        mLastActivityTime         = TimerMilli::GetNow();
-        mLastSupervisionProbeTime = TimerMilli::GetNow();
+        mLastScaRxTimestamp          = 0;
+        mLastActivityTime            = TimerMilli::GetNow();
+        mLastActivityRadioUs         = 0;
+        mLastSupervisionProbeTime    = TimerMilli::GetNow();
+        mLastSupervisionProbeRadioUs = 0;
     }
 
     /**
@@ -190,12 +192,38 @@ public:
      *
      * @param[in]  aRadioNow         The current radio time in microseconds.
      * @param[in]  aAheadUs          Minimum lead time required before transmission.
+     * @param[in]  aEarliestUs       Optional idle bound in radio time. Zero means no extra bound.
      * @param[out] aWindowStartTime  The next receive-window start time in microseconds.
      *
      * @retval TRUE   The next receive-window start time was calculated successfully.
      * @retval FALSE  The peer does not advertise an SLW schedule or no anchor timestamp is available.
      */
-    bool GetNextSlwWindowStart(uint64_t aRadioNow, uint32_t aAheadUs, uint64_t &aWindowStartTime) const;
+    bool GetNextSlwWindowStart(uint64_t  aRadioNow,
+                               uint32_t  aAheadUs,
+                               uint64_t  aEarliestUs,
+                               uint64_t &aWindowStartTime) const;
+
+    /**
+     * Maps @p aRadioTime onto the start of the SLW window that contains it.
+     *
+     * If the peer does not advertise an SLW schedule, returns @p aRadioTime unchanged.
+     *
+     * @param[in] aRadioTime  A radio timestamp in microseconds.
+     *
+     * @returns The containing window start, or @p aRadioTime when no SLW is advertised.
+     */
+    uint64_t AlignToSlwWindowStart(uint64_t aRadioTime) const;
+
+    /**
+     * Maps @p aRadioTime onto the nearest SLW window start.
+     *
+     * If the peer does not advertise an SLW schedule, returns @p aRadioTime unchanged.
+     *
+     * @param[in] aRadioTime  A radio timestamp in microseconds.
+     *
+     * @returns The nearest window start, or @p aRadioTime when no SLW is advertised.
+     */
+    uint64_t SnapToNearestSlwWindowStart(uint64_t aRadioTime) const;
 
     /**
      * Increments the count of re-transmitted link teardown frames.
@@ -220,8 +248,8 @@ public:
     void     SetSlwPeriodSlots(uint16_t aPeriod) { mSlwPeriodSlots = aPeriod; }
     uint16_t GetSlwPhaseSlots(void) const { return mSlwPhaseSlots; }
     void     SetSlwPhaseSlots(uint16_t aPhase) { mSlwPhaseSlots = aPhase; }
-    uint16_t GetSupervisionIntervalMs(void) const { return mSupervisionIntervalMs; }
-    void     SetSupervisionIntervalMs(uint16_t aIntervalMs) { mSupervisionIntervalMs = aIntervalMs; }
+    uint32_t GetSupervisionIntervalMs(void) const { return mSupervisionIntervalMs; }
+    void     SetSupervisionIntervalMs(uint32_t aIntervalMs) { mSupervisionIntervalMs = aIntervalMs; }
     uint8_t  GetServicesBitmap(void) const { return mServicesBitmap; }
     void     SetServicesBitmap(uint8_t aBitmap) { mServicesBitmap = aBitmap; }
     bool     HasScaSchedule(void) const { return mHasScaSchedule; }
@@ -244,6 +272,24 @@ public:
      * @param[in] aTime  The time of the exchange.
      */
     void SetLastActivityTime(TimeMilli aTime) { mLastActivityTime = aTime; }
+
+    /**
+     * Gets the radio time of the last successful TX or RX exchange with this peer.
+     *
+     * @returns The radio time of the last exchange, in microseconds. Zero if unknown.
+     */
+    uint64_t GetLastActivityRadioUs(void) const { return mLastActivityRadioUs; }
+
+    /**
+     * Records a successful TX or RX exchange.
+     *
+     * @param[in] aRadioUs  Radio time of the exchange, in microseconds.
+     */
+    void RecordActivity(uint64_t aRadioUs)
+    {
+        mLastActivityTime    = TimerMilli::GetNow();
+        mLastActivityRadioUs = aRadioUs;
+    }
 
     /**
      * Gets the count of consecutive un-acked link supervision probes sent to this peer.
@@ -291,12 +337,26 @@ public:
      */
     void SetLastSupervisionProbeTime(TimeMilli aTime) { mLastSupervisionProbeTime = aTime; }
 
+    /**
+     * Gets the radio time of the most recent link supervision probe to this peer.
+     *
+     * @returns The probe's TX window start in microseconds. Zero if unknown.
+     */
+    uint64_t GetLastSupervisionProbeRadioUs(void) const { return mLastSupervisionProbeRadioUs; }
+
+    /**
+     * Sets the radio time of the most recent link supervision probe to this peer.
+     *
+     * @param[in] aRadioUs  The probe's TX window start in microseconds.
+     */
+    void SetLastSupervisionProbeRadioUs(uint64_t aRadioUs) { mLastSupervisionProbeRadioUs = aRadioUs; }
+
 private:
     uint16_t
         mSlwPeriodSlots; ///< SLW period in units of advertised Slot Duration (0 = clear schedule / rx-on-when-idle).
     uint16_t mSlwPhaseSlots;                ///< SLW phase in slot-duration units.
     uint32_t mLastWakeFrameCounter;         ///< Last accepted wake frame counter (replay protection).
-    uint16_t mSupervisionIntervalMs;        ///< Supervision interval from TD Link Command.
+    uint32_t mSupervisionIntervalMs;        ///< Supervision interval from TD Link Command, in milliseconds.
     uint8_t  mServicesBitmap;               ///< Services bitmap from TD Link Command (bit 0 = peer has SRP server).
     uint8_t  mWakeKeyIndex;                 ///< Key index that secured this link (129 or 130-192).
     uint8_t  mTearDownCount : 3;            ///< Retransmitted teardown frame count.
@@ -312,8 +372,10 @@ private:
     uint64_t         mSlwPeriodUs;
     uint64_t         mSlwPhaseUs;
     uint64_t         mLastScaRxTimestamp;
-    TimeMilli        mLastActivityTime;         ///< Time of the last successful TX or RX exchange with this peer.
-    TimeMilli        mLastSupervisionProbeTime; ///< Time the most recent supervision probe to this peer completed.
+    TimeMilli        mLastActivityTime;            ///< Time of the last successful TX or RX exchange with this peer.
+    TimeMilli        mLastSupervisionProbeTime;    ///< Time the most recent supervision probe to this peer completed.
+    uint64_t         mLastActivityRadioUs;         ///< Radio time of the last successful exchange, in microseconds.
+    uint64_t         mLastSupervisionProbeRadioUs; ///< Radio time of the last probe TX window, in microseconds.
 };
 
 } // namespace ot

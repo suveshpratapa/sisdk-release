@@ -402,30 +402,32 @@ void otPlatRadioSetWakeKey(otInstance *aInstance, uint8_t aKeyIndex, const otMac
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 otError otPlatRadioSetThreadDirectSlwSchedule(otInstance *aInstance, uint16_t aSlwPeriod, uint32_t aSlotDurationUs)
 {
-    OT_UNUSED_VARIABLE(aInstance);
-    OT_UNUSED_VARIABLE(aSlwPeriod);
-    OT_UNUSED_VARIABLE(aSlotDurationUs);
+    Radio &radio = AsNode(aInstance).mRadio;
+
+    radio.mRadioContext.mSlwPresent        = (aSlwPeriod != 0);
+    radio.mRadioContext.mSlwPeriod         = aSlwPeriod;
+    radio.mRadioContext.mSlwSlotDurationUs = aSlotDurationUs;
+    radio.mRadioContext.mRamOffsetUs       = 0;
     return kErrorNone;
 }
 
 void otPlatRadioUpdateThreadDirectSlwSampleTime(otInstance *aInstance, uint32_t aSlwSampleTime)
 {
-    OT_UNUSED_VARIABLE(aInstance);
-    OT_UNUSED_VARIABLE(aSlwSampleTime);
+    AsNode(aInstance).mRadio.mRadioContext.mSlwSampleTime = aSlwSampleTime;
 }
 
 uint8_t otPlatRadioGetThreadDirectSlwAccuracy(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
-    return 255;
+    return 20;
 }
 
 uint8_t otPlatRadioGetThreadDirectSlwUncertainty(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
-    return 255;
+    return 10;
 }
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 otError otPlatRadioGetThreadDirectRamParams(otInstance *aInstance, otThreadDirectRamParams *aParams)

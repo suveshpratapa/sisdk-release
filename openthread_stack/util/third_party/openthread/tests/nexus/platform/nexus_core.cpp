@@ -852,7 +852,7 @@ void Core::ProcessRadio(Node &aNode)
         if (rxFrame.IsVersion2015())
         {
             // Use a buffer large enough for standard IEs plus the TD Thread Header IE.
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
             uint8_t ackIeData[OT_ACK_IE_MAX_SIZE + Radio::kTdEnhAckIeMaxSize];
 #else
             uint8_t ackIeData[OT_ACK_IE_MAX_SIZE];
@@ -889,28 +889,44 @@ void Core::ProcessRadio(Node &aNode)
                 }
             }
 #endif
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
-            // Identify TD Link Command by unencrypted header fields (payload is still encrypted here).
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+            // Identify wake-key ACK-requesting frames (TD Link Command, supervision, data).
             {
-                uint8_t keyId       = 0;
-                bool    isTdLinkCmd = aNode.mRadio.mTxFrame.GetAckRequest() && aNode.mRadio.mTxFrame.IsIePresent() &&
-                                   (aNode.mRadio.mTxFrame.GetKeyId(keyId) == ot::kErrorNone) &&
-                                   keyId >= OT_MAC_FRAME_WAKE_KEY_INDEX &&
-                                   keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX;
+                uint8_t keyId         = 0;
+                bool isTdWakeKeyFrame = aNode.mRadio.mTxFrame.GetAckRequest() && aNode.mRadio.mTxFrame.IsIePresent() &&
+                                        (aNode.mRadio.mTxFrame.GetKeyId(keyId) == ot::kErrorNone) &&
+                                        keyId >= OT_MAC_FRAME_WAKE_KEY_INDEX &&
+                                        keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX;
 
-                if (isTdLinkCmd)
+                if (isTdWakeKeyFrame)
                 {
-                    uint8_t available =
+                    otMacFrameThreadDirectSca sca;
+                    uint8_t                   available =
                         static_cast<uint8_t>((OT_ACK_IE_MAX_SIZE + Radio::kTdEnhAckIeMaxSize) - ackIeDataLength);
-                    ackIeDataLength += otMacFrameGenerateThreadDirectEnhAckIe(&aNode.mRadio.mTxFrame,
-                                                                              ackIeData + ackIeDataLength, available);
+
+                    memset(&sca, 0, sizeof(sca));
+
+                    if (ackNode->mRadio.mRadioContext.mSlwPeriod != 0)
+                    {
+                        sca.mHasSlw        = true;
+                        sca.mSlwPeriod     = ackNode->mRadio.mRadioContext.mSlwPeriod;
+                        sca.mRamOffsetUs   = ackNode->mRadio.mRadioContext.mRamOffsetUs;
+                        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(&ackNode->GetInstance());
+                        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(&ackNode->GetInstance());
+                        otMacFrameCalculateSlwPhaseAndRamOffset(
+                            ackNode->mRadio.mRadioContext.mSlwSampleTime, static_cast<uint32_t>(mNow), sca.mSlwPeriod,
+                            ackNode->mRadio.mRadioContext.mSlwSlotDurationUs, &sca.mSlwPhase, &sca.mRamOffsetUs);
+                    }
+
+                    ackIeDataLength += otMacFrameGenerateThreadDirectEnhAckIe(
+                        &aNode.mRadio.mTxFrame, ackIeData + ackIeDataLength, available, &sca);
                 }
 
                 SuccessOrExit(
                     ackFrame.GenerateEnhAck(rxFrame, (ackMode == kSendAckFramePending), ackIeData, ackIeDataLength));
 
                 // For a TD Link Command Enh-ACK, encrypt with the wake key (key ID 129 or guest key).
-                if (isTdLinkCmd)
+                if (isTdWakeKeyFrame)
                 {
                     uint8_t                 ackKeyId = 0;
                     const otMacKeyMaterial *wakeKey  = nullptr;

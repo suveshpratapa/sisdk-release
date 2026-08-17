@@ -161,6 +161,7 @@ enum
     OT_IE_HEADER_SIZE               = 2,  ///< Size of IE header in bytes.
     OT_CSL_IE_SIZE                  = 4,  ///< Size of CSL IE content in bytes.
     OT_ACK_IE_MAX_SIZE              = 16, ///< Max length for header IE in ACK.
+    OT_TD_ENH_ACK_IE_MAX_SIZE       = 40, ///< Extra Enh-ACK IE space for Thread Direct Challenge + SCA LTVs.
     OT_ENH_PROBING_IE_DATA_MAX_SIZE = 2,  ///< Max length of Link Metrics data in Vendor-Specific IE.
 };
 

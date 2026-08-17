@@ -77,7 +77,7 @@ typedef struct otThreadDirectPeerInfo
     uint16_t     mSlwPeriodSlots;    ///< Peer's SLW period in units of advertised Slot Duration (0 = clear schedule /
                                      ///< rx-on-when-idle).
     uint16_t mSlwPhaseSlots;         ///< Peer's SLW phase in units of advertised Slot Duration.
-    uint16_t mSupervisionIntervalMs; ///< Supervision interval from TD Link Command, in milliseconds.
+    uint32_t mSupervisionIntervalMs; ///< Supervision interval from TD Link Command, in milliseconds.
     uint8_t  mServicesBitmap;        ///< Services bitmap: bit 0 = peer has SRP server.
 
     /* Fields below are valid only for OT_THREAD_DIRECT_EVENT_WAKE_RECEIVED. */
@@ -345,12 +345,7 @@ otError otThreadDirectGetLocalSca(otInstance *aInstance, otThreadDirectLocalSca 
 /**
  * Returns the local Thread Direct link supervision interval, in milliseconds.
  *
- * This is the interval this device advertises to a peer in the TD Link Command. The
- * link's effective supervision interval is the minimum of the two peers' advertised
- * values, unless one side is 0 (no requirement), in which case the other side's value
- * applies. When a link is idle for the effective interval, the stack sends a
- * supervision probe; after `kMaxSupervisionFailures` consecutive un-acked probes, the
- * link is unlinked. Defaults to OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT.
+ * This is the value last passed to `otThreadDirectSetSlwTimeout()`.
  *
  * @param[in] aInstance  The OpenThread instance.
  *
@@ -362,8 +357,10 @@ uint32_t otThreadDirectGetSlwTimeout(otInstance *aInstance);
  * Sets the local Thread Direct link supervision interval, in milliseconds.
  *
  * @param[in] aInstance  The OpenThread instance.
- * @param[in] aTimeout   Interval in milliseconds. 0 imposes no local requirement,
- *                       deferring entirely to the peer's advertised interval.
+ * @param[in] aTimeout   Interval in milliseconds. 0 imposes no local requirement.
+ *                       Converted to a whole number of local SLW periods (at
+ *                       least one). With no SLW (rx-on), the wire field is
+ *                       omitted and the timer uses @p aTimeout.
  *
  * @retval OT_ERROR_NONE          Interval updated.
  * @retval OT_ERROR_INVALID_ARGS  @p aTimeout exceeds

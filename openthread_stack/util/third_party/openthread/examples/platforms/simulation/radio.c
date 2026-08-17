@@ -29,6 +29,7 @@
 #include "platform-simulation.h"
 
 #include <errno.h>
+#include <string.h>
 #include <sys/time.h>
 
 #include <openthread/cli.h>
@@ -135,7 +136,7 @@ static uint8_t sCurrentChannel = kMinChannel;
 static bool sSrcMatchEnabled = false;
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
-static uint8_t sAckIeData[OT_ACK_IE_MAX_SIZE];
+static uint8_t sAckIeData[OT_ACK_IE_MAX_SIZE + OT_TD_ENH_ACK_IE_MAX_SIZE];
 static uint8_t sAckIeDataLength = 0;
 #endif
 
@@ -1051,6 +1052,45 @@ uint64_t otPlatRadioGetNow(otInstance *aInstance)
 }
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
+#if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE) && \
+    (OPENTHREAD_FTD || OPENTHREAD_MTD)
+static bool isThreadDirectWakeKeyAck(const otRadioFrame *aFrame)
+{
+    uint8_t keyId;
+
+    if (!otMacFrameIsAckRequested(aFrame) || !otMacFrameIsSecurityEnabled(aFrame) || !otMacFrameIsKeyIdMode1(aFrame))
+    {
+        return false;
+    }
+
+    keyId = otMacFrameGetKeyId(aFrame);
+
+    return (keyId == OT_MAC_FRAME_WAKE_KEY_INDEX) ||
+           (keyId >= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MIN && keyId <= OT_MAC_FRAME_GUEST_WAKE_KEY_INDEX_MAX);
+}
+
+static uint8_t generateThreadDirectEnhAckIe(const struct otRadioFrame *aReceivedFrame, uint8_t *aDest, uint8_t aDestLen)
+{
+    otMacFrameThreadDirectSca sca;
+
+    memset(&sca, 0, sizeof(sca));
+
+    if (sRadioContext.mSlwPeriod != 0)
+    {
+        sca.mHasSlw        = true;
+        sca.mSlwPeriod     = sRadioContext.mSlwPeriod;
+        sca.mRamOffsetUs   = sRadioContext.mRamOffsetUs;
+        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(NULL);
+        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(NULL);
+        otMacFrameCalculateSlwPhaseAndRamOffset(sRadioContext.mSlwSampleTime, (uint32_t)otPlatTimeGet(),
+                                                sRadioContext.mSlwPeriod, sRadioContext.mSlwSlotDurationUs,
+                                                &sca.mSlwPhase, &sca.mRamOffsetUs);
+    }
+
+    return otMacFrameGenerateThreadDirectEnhAckIe(aReceivedFrame, aDest, aDestLen, &sca);
+}
+#endif
+
 static uint8_t generateAckIeData(uint8_t                   *aLinkMetricsIeData,
                                  uint8_t                    aLinkMetricsIeDataLen,
                                  const struct otRadioFrame *aReceivedFrame)
@@ -1078,12 +1118,12 @@ static uint8_t generateAckIeData(uint8_t                   *aLinkMetricsIeData,
     }
 #endif
 
-#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
-    if (otMacFrameIsTdLinkCommand(aReceivedFrame))
+#if (OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE) && \
+    (OPENTHREAD_FTD || OPENTHREAD_MTD)
+    if (isThreadDirectWakeKeyAck(aReceivedFrame))
     {
-        uint8_t available = (uint8_t)(OT_ACK_IE_MAX_SIZE - offset);
-
-        offset += otMacFrameGenerateThreadDirectEnhAckIe(aReceivedFrame, sAckIeData + offset, available);
+        offset +=
+            generateThreadDirectEnhAckIe(aReceivedFrame, sAckIeData + offset, (uint8_t)(sizeof(sAckIeData) - offset));
     }
 #endif
 
@@ -1208,7 +1248,7 @@ uint8_t otPlatRadioGetThreadDirectSlwUncertainty(otInstance *aInstance)
     OT_UNUSED_VARIABLE(aInstance);
     return 255;
 }
-#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 otError otPlatRadioGetThreadDirectRamParams(otInstance *aInstance, otThreadDirectRamParams *aParams)

@@ -53,11 +53,27 @@ class ThreadDirectTxScheduler : public InstanceLocator, private NonCopyable
     friend class MeshForwarder;
 
 public:
+    enum Command : uint8_t
+    {
+        kCommandNone = 0,
+        kCommandTdLinkCmd,
+        kCommandSupervision,
+        kCommandTeardown,
+    };
+
     explicit ThreadDirectTxScheduler(Instance &aInstance);
 
     Error TrySchedule(Message &aMessage, const Mac::Address &aDestAddress);
+    Error ScheduleMacCommand(Command aCommand, const Mac::Address &aDestAddress, uint64_t aEarliestUs = 0);
     void  Update(void);
     void  Clear(void);
+    void  ClearIfMacCommand(void);
+    void  ClearIfCommand(Command aCommand);
+
+    bool     IsPending(void) const { return (mPendingMessage != nullptr) || (mPendingCommand != kCommandNone); }
+    bool     HasPendingSchedule(void) const { return mHasPendingSchedule; }
+    uint64_t GetPendingWindowStart(void) const { return mPendingSchedule.mWindowStart; }
+    void     ApplyPendingSchedule(Mac::TxFrame &aFrame) const;
 
 private:
     static constexpr uint16_t kMaxFrameSize                  = 150;
@@ -66,15 +82,17 @@ private:
 
     void  UpdateFrameRequestAhead(void);
     Error ScheduleTransmission(const Mac::ThreadDirectTxSchedule &aSchedule);
+    void  RequestMacCommand(Command aCommand, uint32_t aDelayUs);
+    void  RequestImmediateMacCommand(Command aCommand);
 
     Mac::TxFrame *HandleFrameRequest(Mac::TxFrames &aTxFrames);
     bool          HandleSentFrame(const Mac::TxFrame &aFrame, Error aError);
 
-    bool IsPending(void) const { return mPendingMessage != nullptr; }
     bool IsPendingMessage(const Message &aMessage) const { return mPendingMessage == &aMessage; }
 
     uint32_t                    mFrameRequestAheadUs;
     Message                    *mPendingMessage;
+    Command                     mPendingCommand;
     Mac::Address                mPendingDest;
     Mac::ThreadDirectTxSchedule mPendingSchedule;
     uint32_t                    mFrameCounter;
@@ -83,6 +101,7 @@ private:
     uint8_t                     mDataSequence;
     uint8_t                     mKeyId;
     bool                        mHasRetxFrameInfo;
+    bool                        mHasPendingSchedule;
 };
 
 } // namespace ot

@@ -582,12 +582,27 @@ public:
      * the phase from an explicit reference point — typically the scheduled TX time of a frame.
      * Use this to embed an accurate phase in a frame header at TX-scheduling time.
      *
-     * @param[in] aRefTimeUs      Reference radio time in µs (e.g., scheduled TX timestamp).
-     * @param[in] aSlotDurationUs Slot duration in µs (625 for Thread Direct SCA).
+     * @param[in] aRefTimeUs      Reference radio time in us (e.g., scheduled TX timestamp).
+     * @param[in] aSlotDurationUs Slot duration in us (625 for Thread Direct SCA).
      *
      * @returns Phase in slots from @p aRefTimeUs to the next SLW window, or 0 if SLW is not running.
      */
     uint16_t ComputeSlwPhaseSlotsAt(uint32_t aRefTimeUs, uint32_t aSlotDurationUs) const;
+
+    /**
+     * Computes the advertised SCA phase and RAM offset at a frame's MAC-header time.
+     *
+     * Uses nearest-slot rounding so phase and RAM reconstruct the local sample:
+     * `aRefTimeUs + ram + phase * slot`. Matches the PAL TX/Enh-ACK stamping helper.
+     *
+     * @param[in]  aRefTimeUs    MAC-header radio time of the outgoing frame, in us.
+     * @param[out] aPhaseSlots   Phase in slot-duration units.
+     * @param[out] aRamOffsetUs  Signed remainder in us, in [-1024, 1023].
+     *
+     * @retval true   Phase and RAM offset were computed.
+     * @retval false  Local SLW is not running, or the remainder cannot be encoded.
+     */
+    bool ComputeSlwPhaseAndRamOffsetAt(uint32_t aRefTimeUs, uint16_t &aPhaseSlots, int16_t &aRamOffsetUs) const;
 
     /**
      * Refreshes the TD SLW drift anchor from a validated exchange with a linked peer.
@@ -857,6 +872,7 @@ private:
     bool       mIsThreadDirectSlwEnabled : 1;   // Indicates if local Thread Direct SLW scheduling is enabled.
     uint8_t    mThreadDirectSlwChannel;         // Thread channel used for local SLW sampling.
     uint32_t   mThreadDirectSlwPeriod;          // Local SLW period in microseconds.
+    uint32_t   mThreadDirectSlwSlotDurationUs;  // Advertised SCA slot duration in microseconds.
     TimeMicro  mThreadDirectSlwLastSync;        // TD timing anchor for drift/uncertainty window growth.
     uint32_t   mThreadDirectSlwSampleTimeRadio; // The TD SLW sample time of the current period based on radio time.
     TimeMicro  mThreadDirectSlwSampleTimeLocal;

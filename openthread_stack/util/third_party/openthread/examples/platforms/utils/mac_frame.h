@@ -451,20 +451,37 @@ void otMacFrameSetScaLtvPhase(otRadioFrame *aFrame, uint16_t aPhase);
 #endif
 
 /**
- * Builds the Thread Header IE bytes for an Enh-ACK response to a TD Link Command.
+ * Thread Direct SCA fields included in an Enh-ACK Thread Header IE.
+ */
+typedef struct otMacFrameThreadDirectSca
+{
+    uint16_t mSlwPeriod;     ///< SLW period in slot-duration units.
+    uint16_t mSlwPhase;      ///< SLW phase in slot-duration units.
+    int16_t  mRamOffsetUs;   ///< RAM offset in microseconds.
+    uint8_t  mClockAccuracy; ///< Clock accuracy in ppm.
+    uint8_t  mUncertainty;   ///< Clock uncertainty in 10 us units.
+    bool     mHasSlw;        ///< True if local SLW fields should be included.
+} otMacFrameThreadDirectSca;
+
+/**
+ * Builds the Thread Header IE bytes for an Enh-ACK response to a Thread Direct frame.
  *
- * Extracts the Challenge LTV from @p aFrame and writes a Thread Header IE containing
- * the echoed Challenge LTV to @p aDest.  The output is ready to copy into the Enh-ACK
- * IE region at the ~192 us turnaround deadline.
+ * Echoes the Challenge LTV from @p aFrame when present, and appends an SCA LTV when
+ * @p aSca is non-null and @p aSca->mHasSlw is true. The output is ready to copy into
+ * the Enh-ACK IE region at the ACK turnaround deadline.
  *
- * @param[in]  aFrame    Received TD Link Command frame.
+ * @param[in]  aFrame    Received Thread Direct frame.
  * @param[out] aDest     Output buffer for the Thread Header IE bytes.
  * @param[in]  aDestLen  Capacity of @p aDest in bytes.
+ * @param[in]  aSca      Local SCA to advertise, or NULL to omit the SCA LTV.
  *
- * @returns  Number of bytes written to @p aDest, or 0 if @p aFrame carries no
- *           Challenge LTV or @p aDest is too small.
+ * @returns  Number of bytes written to @p aDest, or 0 if there is nothing to emit
+ *           or @p aDest is too small.
  */
-uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame *aFrame, uint8_t *aDest, uint8_t aDestLen);
+uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame              *aFrame,
+                                               uint8_t                         *aDest,
+                                               uint8_t                          aDestLen,
+                                               const otMacFrameThreadDirectSca *aSca);
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
 /**

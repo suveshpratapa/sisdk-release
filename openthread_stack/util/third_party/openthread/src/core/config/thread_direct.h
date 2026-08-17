@@ -180,9 +180,8 @@
  *
  * Default Thread Direct link supervision interval, in milliseconds.
  *
- * This is the interval this device advertises to a peer in the TD Link Command. The
- * interval that governs a given link is the minimum of the two peers' advertised values.
- * Overridable at runtime via `otThreadDirectSetSlwTimeout()`.
+ * Overridable at runtime via `otThreadDirectSetSlwTimeout()`. Converted to a
+ * whole number of local SLW periods (at least one).
  */
 #ifndef OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT
 #define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_TIMEOUT 1000
@@ -193,8 +192,8 @@
  *
  * Maximum value accepted by `otThreadDirectSetSlwTimeout()`, in milliseconds.
  *
- * Matches the maximum representable value of the TD Link Command Supervision Interval
- * field (`uint8` in 100 ms units).
+ * The wire Supervision Interval field is a `uint8` count of the sender's SLW periods,
+ * so the advertised interval saturates at 255 local SLW periods.
  */
 #ifndef OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT
 #define OPENTHREAD_CONFIG_THREAD_DIRECT_SLW_MAX_TIMEOUT 25500
