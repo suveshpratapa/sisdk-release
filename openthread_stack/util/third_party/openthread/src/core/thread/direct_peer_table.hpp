@@ -183,6 +183,15 @@ public:
     bool HasPeers(DirectPeer::StateFilter aFilter) const;
 
     /**
+     * Returns the number of peers matching a given state filter.
+     *
+     * @param[in] aFilter  A peer state filter.
+     *
+     * @returns The number of matching peers.
+     */
+    uint16_t GetPeerCount(DirectPeer::StateFilter aFilter) const;
+
+    /**
      * Enables range-based `for` loop iteration over all peer entries matching a given
      * state filter.
      *

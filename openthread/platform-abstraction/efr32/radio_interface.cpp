@@ -152,6 +152,7 @@ extern bool sl_rail_util_coex_is_enabled(void);
 
 static otRadioCaps sRadioCapabilities =
     (OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_CSMA_BACKOFF | OT_RADIO_CAPS_ENERGY_SCAN | OT_RADIO_CAPS_SLEEP_TO_TX
+     | OT_RADIO_CAPS_RX_ON_WHEN_IDLE
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
      | OT_RADIO_CAPS_TRANSMIT_SEC
      // When scheduled tx is required, we support sl_rail_start_scheduled_cca_csma_tx
@@ -500,6 +501,24 @@ sl_rail_status_t sli_ot_radio_interface_rail_yield_radio(void)
 sl_rail_radio_state_t sli_ot_radio_interface_rail_get_radio_state(void)
 {
     return sl_rail_get_radio_state(gRailHandle);
+}
+
+bool sli_ot_radio_interface_rail_is_safe_to_schedule_tx(void)
+{
+    bool isSafeToScheduleTx = false;
+
+    sl_rail_radio_state_detail_t radioStateTransition = sl_rail_get_radio_state_detail(gRailHandle);
+
+    /* Already in Rx State */
+    if ((radioStateTransition == RAIL_RF_STATE_DETAIL_RX_STATE)
+        /* Already in Idle State */
+        || ((radioStateTransition & RAIL_RF_STATE_DETAIL_IDLE_STATE) != 0U)
+        /* Transitioning to Rx State */
+        || radioStateTransition == (RAIL_RF_STATE_DETAIL_TRANSITION | RAIL_RF_STATE_DETAIL_RX_STATE))
+    {
+        isSafeToScheduleTx = true;
+    }
+    return isSafeToScheduleTx;
 }
 
 // RAIL TX operations

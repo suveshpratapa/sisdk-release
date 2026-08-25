@@ -112,7 +112,7 @@ void SubMac::StartThreadDirectSlwAtSampleTime(uint32_t aSampleTimeRadio)
         aSampleTimeRadio = nowRadio;
     }
 
-    while (static_cast<int32_t>(aSampleTimeRadio - nowRadio) <= 0)
+    while (static_cast<int32_t>(aSampleTimeRadio - nowRadio) < 0)
     {
         aSampleTimeRadio += mThreadDirectSlwPeriod;
     }
@@ -120,6 +120,23 @@ void SubMac::StartThreadDirectSlwAtSampleTime(uint32_t aSampleTimeRadio)
     mThreadDirectSlwSampleTimeRadio = aSampleTimeRadio;
     mThreadDirectSlwSampleTimeLocal = nowLocal + (aSampleTimeRadio - nowRadio);
     HandleThreadDirectSlwTimer();
+
+exit:
+    return;
+}
+
+void SubMac::RealignThreadDirectSlwSampleTime(uint32_t aSampleTimeRadio)
+{
+    VerifyOrExit(mIsThreadDirectSlwEnabled && (mThreadDirectSlwPeriod > 0));
+
+    mIsThreadDirectSlwSampling = false;
+    mThreadDirectSlwTimer.Stop();
+    StartThreadDirectSlwAtSampleTime(aSampleTimeRadio);
+
+    if (!RadioSupportsReceiveTiming())
+    {
+        UpdateRadioSampleState();
+    }
 
 exit:
     return;

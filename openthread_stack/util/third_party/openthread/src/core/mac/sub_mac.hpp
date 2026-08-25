@@ -563,6 +563,24 @@ public:
                                uint32_t aSampleTimeRadio = 0);
 
     /**
+     * Returns the current local Thread Direct SLW sample time on the radio clock.
+     *
+     * @returns The SLW sample time in radio microseconds, or 0 if SLW is not running.
+     */
+    uint32_t GetThreadDirectSlwSampleTimeRadio(void) const { return mThreadDirectSlwSampleTimeRadio; }
+
+    /**
+     * Re-anchors the local Thread Direct SLW sample grid to @p aSampleTimeRadio.
+     *
+     * Used for post-link relative-phase correction (e.g. keeping WI at peer midpoint).
+     * No-op when SLW is not enabled. Stops the current timer and restarts scheduling
+     * at the new sample time without changing period or channel.
+     *
+     * @param[in] aSampleTimeRadio  Desired SLW sample time in radio microseconds.
+     */
+    void RealignThreadDirectSlwSampleTime(uint32_t aSampleTimeRadio);
+
+    /**
      * Computes the SLW phase in slots at the moment of the call.
      *
      * Returns the number of @p aSlotDurationUs-wide slots until the next SLW sample

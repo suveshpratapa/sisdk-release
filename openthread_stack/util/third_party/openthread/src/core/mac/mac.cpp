@@ -3046,7 +3046,16 @@ bool Mac::IsThreadDirectLinkActive(void) const
 
 Error Mac::UpdateThreadDirectPeerSca(const ExtAddress &aExtAddress, const ScaParams &aSca, uint64_t aRxTimestamp)
 {
-    return Get<DirectPeerTable>().UpdateThreadDirectPeerSca(aExtAddress, aSca, aRxTimestamp);
+    Error error = Get<DirectPeerTable>().UpdateThreadDirectPeerSca(aExtAddress, aSca, aRxTimestamp);
+
+    SuccessOrExit(error);
+
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+    Get<DirectHandler>().MaybeRealignLocalSlwToPeerMidpoint(aExtAddress, aSca, aRxTimestamp);
+#endif
+
+exit:
+    return error;
 }
 
 void Mac::HandleThreadDirectPeerRx(const ExtAddress &aExtAddress, const RxFrame &aFrame, uint64_t aTxWindowStart)
@@ -3291,6 +3300,16 @@ void Mac::BeginPreLinkThreadDirectSlw(uint32_t aSampleTimeRadio)
     mLinks.UpdateThreadDirectSlw(true, static_cast<uint32_t>(periodUs), periodSlots,
                                  directHandler.GetSlwSlotDurationUs(), channel, aSampleTimeRadio);
     UpdateIdleMode();
+
+exit:
+    return;
+}
+
+void Mac::RealignThreadDirectSlwSampleTime(uint32_t aSampleTimeRadio)
+{
+    VerifyOrExit(mIsThreadDirectSlwEnabled);
+
+    mLinks.RealignThreadDirectSlwSampleTime(aSampleTimeRadio);
 
 exit:
     return;

@@ -251,6 +251,7 @@ sl_rail_status_t      sli_ot_radio_interface_rail_idle(void);
 sl_rail_status_t      sli_ot_radio_interface_rail_idle_abort(void);
 sl_rail_status_t      sli_ot_radio_interface_rail_yield_radio(void);
 sl_rail_radio_state_t sli_ot_radio_interface_rail_get_radio_state(void);
+bool                  sli_ot_radio_interface_rail_is_safe_to_schedule_tx(void);
 
 // RAIL TX operations
 sl_rail_status_t sli_ot_radio_interface_rail_start_tx(uint8_t                         channel,

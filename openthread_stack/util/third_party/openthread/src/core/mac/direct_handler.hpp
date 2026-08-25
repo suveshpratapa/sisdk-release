@@ -130,6 +130,24 @@ public:
      */
     Error SendScaUpdate(const Mac::ExtAddress &aPeerAddr);
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+    /**
+     * Realigns the local SLW sample time toward the peer midpoint when relative phase
+     * has drifted beyond one slot.
+     *
+     * WI-only: keeps this device near `peer_sample + period/2` without changing the
+     * peer's schedule. Snap-corrects when the phase error exceeds one slot duration.
+     * No-op for multi-peer links or mismatched periods.
+     *
+     * @param[in] aPeerAddr     Extended address of the peer whose SCA was refreshed.
+     * @param[in] aPeerSca      Peer SCA parameters from the received frame.
+     * @param[in] aRxTimestamp  MAC-header-start RX timestamp of that frame, in microseconds.
+     */
+    void MaybeRealignLocalSlwToPeerMidpoint(const Mac::ExtAddress &aPeerAddr,
+                                            const Mac::ScaParams  &aPeerSca,
+                                            uint64_t               aRxTimestamp);
+#endif
+
     /**
      * Tears down the TD link with @p aExtAddress.
      *

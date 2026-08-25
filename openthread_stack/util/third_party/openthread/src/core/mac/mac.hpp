@@ -892,6 +892,16 @@ public:
      *                              or zero to anchor from the current radio time.
      */
     void BeginPreLinkThreadDirectSlw(uint32_t aSampleTimeRadio = 0);
+
+    /**
+     * Re-anchors the local Thread Direct SLW sample grid to @p aSampleTimeRadio.
+     *
+     * Used by the WI relative-phase lock after link. No-op if local SLW is not enabled.
+     *
+     * @param[in] aSampleTimeRadio  Desired SLW sample time in radio microseconds.
+     */
+    void RealignThreadDirectSlwSampleTime(uint32_t aSampleTimeRadio);
+
     /**
      * Registers a callback for Thread Direct link events.  Valid for both WI and WL roles.
      *

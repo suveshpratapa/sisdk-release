@@ -113,6 +113,28 @@ bool CalculateMidpointSlwSampleTime(const Mac::ScaParams &aPeerSca,
 exit:
     return false;
 }
+
+/**
+ * Shortest signed phase distance from @p aCurrent to @p aDesired on a circle of @p aPeriodUs.
+ */
+int32_t PhaseDeltaUs(uint32_t aDesired, uint32_t aCurrent, uint32_t aPeriodUs)
+{
+    uint32_t forward;
+
+    if (aPeriodUs == 0)
+    {
+        return 0;
+    }
+
+    forward = ((aDesired % aPeriodUs) + aPeriodUs - (aCurrent % aPeriodUs)) % aPeriodUs;
+
+    if (forward > (aPeriodUs / 2))
+    {
+        return static_cast<int32_t>(forward) - static_cast<int32_t>(aPeriodUs);
+    }
+
+    return static_cast<int32_t>(forward);
+}
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
 
 uint32_t SlwPeriodMsFromPeriodUs(uint64_t aSlwPeriodUs)
@@ -353,6 +375,39 @@ exit:
     return error;
 }
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+void DirectHandler::MaybeRealignLocalSlwToPeerMidpoint(const Mac::ExtAddress &aPeerAddr,
+                                                       const Mac::ScaParams  &aPeerSca,
+                                                       uint64_t               aRxTimestamp)
+{
+    uint32_t desiredSampleTime;
+    uint32_t currentSampleTime;
+    uint32_t periodUs;
+    uint32_t hysteresisUs;
+    int32_t  errUs;
+
+    VerifyOrExit(HasSlwSchedule());
+    VerifyOrExit(Get<DirectPeerTable>().GetPeerCount(DirectPeer::kInStateValid) == 1);
+    VerifyOrExit(Get<DirectPeerTable>().FindPeer(aPeerAddr, DirectPeer::kInStateValid) != nullptr);
+
+    VerifyOrExit(CalculateMidpointSlwSampleTime(aPeerSca, mLocalSca, static_cast<uint32_t>(aRxTimestamp),
+                                                static_cast<uint32_t>(Get<Radio>().GetNow()), desiredSampleTime));
+
+    periodUs          = static_cast<uint32_t>(mSlwPeriodUs);
+    hysteresisUs      = mSlwSlotDurationUs;
+    currentSampleTime = Get<Mac::SubMac>().GetThreadDirectSlwSampleTimeRadio();
+    errUs             = PhaseDeltaUs(desiredSampleTime, currentSampleTime, periodUs);
+
+    VerifyOrExit((errUs > static_cast<int32_t>(hysteresisUs)) || (errUs < -static_cast<int32_t>(hysteresisUs)));
+
+    Get<Mac::Mac>().RealignThreadDirectSlwSampleTime(desiredSampleTime);
+    LogInfo("TD WI: realigned SLW to peer midpoint (err %ld us)", static_cast<long>(errUs));
+
+exit:
+    return;
+}
+#endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+
 Error DirectHandler::Unlink(const Mac::ExtAddress &aExtAddress)
 {
     Error        error = kErrorNone;
@@ -493,8 +548,8 @@ void DirectHandler::HandleWlStateTimer(void)
         mWlState = kWlWaitingEnhAck;
         Get<Mac::SubMac>().SetActiveBurstWakeKeyIndex(mWakeupInfo.mWakeKeyIndex);
 
-        // Start SLW now so GetLocalSca() computes an accurate non-zero phase.
-        // The WI uses that phase to schedule message 4 to our first SLW window.
+        // Start sampling using SCA params now, to accurately format SCA LTV while sending a TD link command to the WI.
+        // Then, WI uses those those parameters to calculate WL's receive window to schedule its own TD Link Command.
         Get<Mac::Mac>().BeginPreLinkThreadDirectSlw();
 
         Get<Mac::Mac>().RequestTdLinkCmdTransmission();

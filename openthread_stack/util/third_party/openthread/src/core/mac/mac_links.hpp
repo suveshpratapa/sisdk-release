@@ -510,6 +510,29 @@ public:
         mSubMac.UpdateThreadDirectSlw(aEnable, aPeriodUs, aPeriodSlots, aSlotDurationUs, aChannel, aSampleTimeRadio);
 #endif
     }
+
+    /**
+     * Returns the current local Thread Direct SLW sample time on the radio clock.
+     */
+    uint32_t GetThreadDirectSlwSampleTimeRadio(void) const
+    {
+#if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
+        return mSubMac.GetThreadDirectSlwSampleTimeRadio();
+#else
+        return 0;
+#endif
+    }
+
+    /**
+     * Re-anchors the local Thread Direct SLW sample grid without changing period/channel.
+     */
+    void RealignThreadDirectSlwSampleTime(uint32_t aSampleTimeRadio)
+    {
+        OT_UNUSED_VARIABLE(aSampleTimeRadio);
+#if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
+        mSubMac.RealignThreadDirectSlwSampleTime(aSampleTimeRadio);
+#endif
+    }
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE

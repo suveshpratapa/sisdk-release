@@ -139,6 +139,8 @@ static inline bool txWaitingForAck(void);
 static bool phyStackEventIsEnabled(void);
 #endif // SL_CATALOG_RAIL_UTIL_IEEE802154_STACK_EVENT_PRESENT
 
+static void idleRxOffRadio(otInstance *aInstance, const otRadioFrame *aFrame);
+
 using rxPacketDetails = struct
 {
     uint8_t        length;
@@ -177,6 +179,7 @@ static radioFrame *sCurrentTxPacket = nullptr;
 static uint8_t     sLastLqi         = 0;
 static int8_t      sLastRssi        = 0;
 otExtAddress       sExtAddress[RADIO_EXT_ADDR_COUNT];
+static bool        sRxOnWhenIdle = false;
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 #define IEEE802154_2015_ENH_ACK_TIMING_RX_TO_TX_US 256
@@ -202,6 +205,70 @@ static inline void setRadioTxToIdleOrRxTransition(bool aIdle)
     OT_UNUSED_VARIABLE(sl_rail_set_tx_transitions(sli_ot_radio_interface_get_rail_handle(), &transitions));
 }
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+
+void otPlatRadioSetRxOnWhenIdle(otInstance *aInstance, bool aEnable)
+{
+    sRxOnWhenIdle = aEnable;
+
+    if (!sRxOnWhenIdle)
+    {
+        IgnoreError(otPlatRadioSleep(aInstance));
+    }
+}
+
+// Hardware filter handles the extended address matching so excluding the check for it explicitly.
+static inline bool isUnicastPacket(otInstance *aInstance, const otRadioFrame *aRxFrame)
+{
+    bool         isUnicast = false;
+    otMacAddress destAddress;
+
+    otEXPECT(aRxFrame != NULL);
+
+    otEXPECT(otMacFrameGetDstAddr(aRxFrame, &destAddress) == OT_ERROR_NONE);
+
+    if (destAddress.mType != OT_MAC_ADDRESS_TYPE_NONE && otMacFrameIsData(aRxFrame))
+    {
+        if (((destAddress.mType == OT_MAC_ADDRESS_TYPE_SHORT)
+             && (destAddress.mAddress.mShortAddress == otLinkGetShortAddress(aInstance)))
+            || (destAddress.mType == OT_MAC_ADDRESS_TYPE_EXTENDED))
+        {
+            isUnicast = true;
+        }
+    }
+
+exit:
+    return isUnicast;
+}
+
+// Rx Off devices are expected to receive unicast data poll packets after the data poll, so Idle the radio if unicast
+// packet is received. For all other packets, keep the radio state as is. When node is configured with stay awake
+// between fragments config, do not idle the radio if FP bit is set in the given frame. Note:
+static inline void idleRxOffRadioAfterUnicast(otInstance *aInstance, const otRadioFrame *aRxFrame)
+{
+    otEXPECT(isUnicastPacket(aInstance, aRxFrame));
+
+#if OPENTHREAD_CONFIG_MAC_STAY_AWAKE_BETWEEN_FRAGMENTS
+    idleRxOffRadio(aInstance, aRxFrame);
+#else
+    idleRxOffRadio(aInstance, NULL);
+#endif
+
+exit:
+    return;
+}
+
+static void idleRxOffRadio(otInstance *aInstance, const otRadioFrame *aFrame)
+{
+    // Idle the radio if a node is configured as rx-off-when-idle and
+    // 1. A frame is NULL. This could be due to
+    //      a. Transmitted the frame without ack request.
+    //      b. Any receiving frame if stay awake between fragments config is not enabled.
+    // 2. Frame pending bit is not set in the given frame.
+    if (!sRxOnWhenIdle && (aFrame == NULL || !(aFrame->mPsdu[0] & IEEE802154_FRAME_FLAG_FRAME_PENDING)))
+    {
+        IgnoreError(otPlatRadioSleep(aInstance));
+    }
+}
 
 #if OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 static otRadioIeInfo sTransmitIeInfo[RADIO_REQUEST_BUFFER_COUNT];
@@ -505,7 +572,12 @@ bool sli_ot_radio_state_is_waiting_for_ack(void)
 
 bool sli_ot_radio_state_is_tx_scheduled(void)
 {
-    return getInternalFlag(FLAG_SCHEDULED_TX_PENDING | EVENT_SCHEDULED_TX_STARTED);
+    return getInternalFlag(FLAG_SCHEDULED_TX_PENDING);
+}
+
+bool sli_ot_radio_state_is_tx_scheduled_or_started(void)
+{
+    return (sli_ot_radio_state_is_tx_scheduled() || getInternalFlag(EVENT_SCHEDULED_TX_STARTED));
 }
 
 void sli_ot_radio_state_set_scheduled_rx_pending(bool aPending)
@@ -516,6 +588,11 @@ void sli_ot_radio_state_set_scheduled_rx_pending(bool aPending)
 bool sli_ot_radio_state_is_rx_scheduled(void)
 {
     return getInternalFlag(FLAG_SCHEDULED_RX_PENDING);
+}
+
+bool sli_ot_radio_state_is_rx_scheduled_or_started(void)
+{
+    return (sli_ot_radio_state_is_rx_scheduled() || getInternalFlag(EVENT_SCHEDULED_RX_STARTED));
 }
 
 void sli_ot_radio_state_set_scheduled_rx_started(bool aStarted)
@@ -818,7 +895,7 @@ void sli_ot_radio_events_process_callback(sl_rail_handle_t aRailHandle, sl_rail_
     {
         sli_ot_radio_events_process_scheduled_rx_events(aEvents);
     }
-    else
+    else if (sli_ot_radio_state_is_tx_scheduled())
     {
         sli_ot_radio_events_process_scheduled_tx_events(aEvents);
     }
@@ -1472,7 +1549,7 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
     sli_ot_radio_channel_switching_configure(aInstance, aChannel);
 #endif
 
-    // Idle the radio to abort the scheduled Rx gracefully.
+    // Idle the radio to abort the scheduled or active Rx gracefully.
     if (sli_ot_radio_state_is_rx_scheduled())
     {
         sli_ot_radio_interface_rail_idle();
@@ -1501,7 +1578,14 @@ otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t a
 
     // We can only have one schedule request i.e. either Rx or Tx as they use the
     // same RAIL resources.
-    otEXPECT_ACTION(!sli_ot_radio_state_is_tx_scheduled(), error = OT_ERROR_FAILED);
+    otEXPECT_ACTION(!sli_ot_radio_state_is_tx_scheduled_or_started(), error = OT_ERROR_FAILED);
+
+    // Idle the radio to abort the scheduled or active Rx gracefully.
+    if (sli_ot_radio_state_is_rx_scheduled_or_started())
+    {
+        sli_ot_radio_interface_rail_idle();
+        sli_ot_radio_state_clear_scheduled_rx_events();
+    }
 
     otEXPECT_ACTION(sl_ot_rtos_task_can_access_pal(), error = OT_ERROR_REJECTED);
     OT_UNUSED_VARIABLE(aInstance);
@@ -1807,8 +1891,21 @@ void txCurrentPacket(void)
     }
 #endif
 
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+    // Defer the wake frame transmission if there is an overlap Rx, presumly it is a incoming TD link command.
+    bool skipWakeCommandTx = false;
+    if (otMacFrameIsTdWakeCommand(&sCurrentTxPacket->frame) && !sli_ot_radio_interface_rail_is_safe_to_schedule_tx())
+    {
+        skipWakeCommandTx = true;
+    }
+#endif
+
     // Prioritize the Tx over schedule Rx to avoid missing data check-ins such as data polls.
-    if (sli_ot_radio_state_is_rx_scheduled())
+    if (sli_ot_radio_state_is_rx_scheduled()
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+        && !skipWakeCommandTx
+#endif
+    )
     {
         sli_ot_radio_interface_rail_idle();
         sli_ot_radio_state_set_scheduled_rx_pending(false);
@@ -1826,10 +1923,21 @@ void txCurrentPacket(void)
             csmaConfig.csma_tries        = sCurrentTxPacket->frame.mInfo.mTxInfo.mMaxCsmaBackoffs;
             csmaConfig.cca_threshold_dbm = sli_ot_radio_interface_get_cca_threshold();
 
-            status = sli_ot_radio_interface_rail_start_cca_csma_tx(sCurrentTxPacket->frame.mChannel,
-                                                                   txOptions,
-                                                                   &csmaConfig,
-                                                                   &txSchedulerInfo);
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+            if (!skipWakeCommandTx)
+            {
+#endif
+                status = sli_ot_radio_interface_rail_start_cca_csma_tx(sCurrentTxPacket->frame.mChannel,
+                                                                       txOptions,
+                                                                       &csmaConfig,
+                                                                       &txSchedulerInfo);
+#if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE
+            }
+            else
+            {
+                status = SL_RAIL_STATUS_INVALID_STATE;
+            }
+#endif
         }
         else
         {
@@ -2793,6 +2901,7 @@ static void deliverRxPacketToInstance(otInstance *aInstance)
     sReceive.frame.mInfo.mRxInfo.mAckFrameCounter = sli_ot_radio_security_get_ack_frame_counter(aInstance);
 #endif
 
+    idleRxOffRadioAfterUnicast(aInstance, &sReceive.frame);
 #if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
     sl_gp_intf_should_buffer_pkt(aInstance, &sReceive.frame, true);
 #else
@@ -2852,7 +2961,7 @@ static void processNextRxPacket(otInstance *aInstance)
 
 static void processRxPackets(otInstance *aInstance)
 {
-    while (!queueIsEmpty(&sRxPacketQueue))
+    while (!sli_ot_radio_state_is_transmitting_or_scanning() && !queueIsEmpty(&sRxPacketQueue))
     {
         processNextRxPacket(aInstance);
     }
@@ -2898,6 +3007,7 @@ static void processTxComplete(otInstance *aInstance)
             otLogDebgPlat("Transmit failed ErrorCode=%d", txStatus);
         }
 
+        idleRxOffRadio(aInstance, ackFrame);
         // Clear any internally-set txDelays so future transmits are not affected.
         sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime = 0;
         sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelay         = 0;

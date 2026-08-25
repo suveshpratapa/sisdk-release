@@ -198,6 +198,19 @@ bool DirectPeerTable::HasPeers(DirectPeer::StateFilter aFilter) const
     return (FindPeer(DirectPeer::AddressMatcher(aFilter)) != nullptr);
 }
 
+uint16_t DirectPeerTable::GetPeerCount(DirectPeer::StateFilter aFilter) const
+{
+    uint16_t count = 0;
+
+    for (DirectPeer &peer : AsNonConst(this)->Iterate(aFilter))
+    {
+        OT_UNUSED_VARIABLE(peer);
+        count++;
+    }
+
+    return count;
+}
+
 bool DirectPeerTable::IsFull(void) const
 {
     return FindPeer(DirectPeer::AddressMatcher(DirectPeer::kInStateInvalid)) == nullptr;
