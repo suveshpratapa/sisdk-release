@@ -98,6 +98,18 @@ public:
 
     bool IsRunning(void) const { return mIsRunning || (mTdWakeState != kTdWakeIdle); }
 
+#if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
+    /**
+     * Sets the Connection Retry Count encoded in subsequent Wake Frames.
+     *
+     * Count 0 is a single connection window at the rendezvous time. The value is
+     * masked to the 4-bit field carried in the Wake Frame.
+     *
+     * @param[in] aRetryCount  Connection Retry Count.
+     */
+    void SetConnectionRetryCount(uint8_t aRetryCount) { mConnectionRetryCount = aRetryCount & 0x0f; }
+#endif
+
     /**
      * Called by `DirectHandler` when a TD Link Command is received from the WL.
      *
@@ -154,6 +166,7 @@ private:
     WakeupTimer               mTimer;
     ConnectionWindowTimer     mConnectionWindowTimer;
     TdWakeState               mTdWakeState;
+    uint8_t                   mConnectionRetryCount;
     bool                      mIsRunning;
 };
 

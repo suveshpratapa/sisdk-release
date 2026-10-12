@@ -455,12 +455,10 @@ void otMacFrameSetScaLtvPhase(otRadioFrame *aFrame, uint16_t aPhase);
  */
 typedef struct otMacFrameThreadDirectSca
 {
-    uint16_t mSlwPeriod;     ///< SLW period in slot-duration units.
-    uint16_t mSlwPhase;      ///< SLW phase in slot-duration units.
-    int16_t  mRamOffsetUs;   ///< RAM offset in microseconds.
-    uint8_t  mClockAccuracy; ///< Clock accuracy in ppm.
-    uint8_t  mUncertainty;   ///< Clock uncertainty in 10 us units.
-    bool     mHasSlw;        ///< True if local SLW fields should be included.
+    uint16_t mSlwPeriod;   ///< SLW period in slot-duration units.
+    uint16_t mSlwPhase;    ///< SLW phase in slot-duration units.
+    int16_t  mRamOffsetUs; ///< RAM offset in microseconds.
+    bool     mHasSlw;      ///< True if local SLW fields should be included.
 } otMacFrameThreadDirectSca;
 
 /**

@@ -112,6 +112,7 @@ struct Radio
 
     otMacKeyMaterial mWakeKeys[kWakeKeyCount];
     bool             mWakeKeySet[kWakeKeyCount];
+    bool             mCorruptTdEnhAckChallenge;
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE

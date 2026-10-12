@@ -93,10 +93,8 @@ uint8_t sli_ot_radio_direct_generate_enh_ack_ie_data(otInstance   *aInstance,
     {
         uint32_t now = otPlatAlarmMicroGetNow();
 
-        sca.mHasSlw        = true;
-        sca.mSlwPeriod     = sli_ot_radio_direct_slw_get_period(aInstance);
-        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(aInstance);
-        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(aInstance);
+        sca.mHasSlw    = true;
+        sca.mSlwPeriod = sli_ot_radio_direct_slw_get_period(aInstance);
         sli_ot_radio_direct_slw_get_phase_and_ram_offset(aInstance, now, &sca.mSlwPhase, &sca.mRamOffsetUs);
     }
 

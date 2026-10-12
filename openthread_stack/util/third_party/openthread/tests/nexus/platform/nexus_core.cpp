@@ -908,18 +908,29 @@ void Core::ProcessRadio(Node &aNode)
 
                     if (ackNode->mRadio.mRadioContext.mSlwPeriod != 0)
                     {
-                        sca.mHasSlw        = true;
-                        sca.mSlwPeriod     = ackNode->mRadio.mRadioContext.mSlwPeriod;
-                        sca.mRamOffsetUs   = ackNode->mRadio.mRadioContext.mRamOffsetUs;
-                        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(&ackNode->GetInstance());
-                        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(&ackNode->GetInstance());
+                        sca.mHasSlw      = true;
+                        sca.mSlwPeriod   = ackNode->mRadio.mRadioContext.mSlwPeriod;
+                        sca.mRamOffsetUs = ackNode->mRadio.mRadioContext.mRamOffsetUs;
                         otMacFrameCalculateSlwPhaseAndRamOffset(
                             ackNode->mRadio.mRadioContext.mSlwSampleTime, static_cast<uint32_t>(mNow), sca.mSlwPeriod,
                             ackNode->mRadio.mRadioContext.mSlwSlotDurationUs, &sca.mSlwPhase, &sca.mRamOffsetUs);
                     }
 
-                    ackIeDataLength += otMacFrameGenerateThreadDirectEnhAckIe(
-                        &aNode.mRadio.mTxFrame, ackIeData + ackIeDataLength, available, &sca);
+                    uint8_t ieStart = ackIeDataLength;
+                    uint8_t ieLen;
+
+                    ieLen = otMacFrameGenerateThreadDirectEnhAckIe(&aNode.mRadio.mTxFrame, ackIeData + ieStart,
+                                                                   available, &sca);
+
+                    // Packed Challenge LTV begins at HeaderIe(2) + one packed header byte, 0x83.
+                    // Flip the challenge before the Enh-ACK is sealed so the MIC still matches.
+                    if (ackNode->mRadio.mCorruptTdEnhAckChallenge && (ieLen > 3) && (ackIeData[ieStart + 2] == 0x83))
+                    {
+                        ackIeData[ieStart + 3] ^= 0xff;
+                        ackNode->mRadio.mCorruptTdEnhAckChallenge = false;
+                    }
+
+                    ackIeDataLength += ieLen;
                 }
 
                 SuccessOrExit(

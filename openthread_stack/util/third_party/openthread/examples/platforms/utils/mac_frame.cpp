@@ -719,15 +719,12 @@ uint8_t otMacFrameGenerateThreadDirectEnhAckIe(const otRadioFrame              *
         ScaParams scaParams;
 
         memset(&scaParams, 0, sizeof(scaParams));
-        scaParams.mHasSlw           = true;
-        scaParams.mHasClockAccuracy = true;
-        scaParams.mSlwPeriodSlots   = aSca->mSlwPeriod;
-        scaParams.mSlwPhaseSlots    = aSca->mSlwPhase;
-        scaParams.mRamOffsetUs      = aSca->mRamOffsetUs;
-        scaParams.mClockAccuracy    = aSca->mClockAccuracy;
-        scaParams.mUncertainty      = aSca->mUncertainty;
-        scaParams.mSlotDuration     = ScaSlotDuration::k625Usec;
-        scaParams.mRamAvailable     = false;
+        scaParams.mHasSlw         = true;
+        scaParams.mSlwPeriodSlots = aSca->mSlwPeriod;
+        scaParams.mSlwPhaseSlots  = aSca->mSlwPhase;
+        scaParams.mRamOffsetUs    = aSca->mRamOffsetUs;
+        scaParams.mSlotDuration   = ScaSlotDuration::k625Usec;
+        scaParams.mRamAvailable   = false;
         IgnoreError(AppendScaLtv(plainBuilder, scaParams));
     }
 

@@ -148,9 +148,11 @@ public:
      */
     enum LinkParamMask : uint8_t
     {
-        kLinkParamMaskSupervisionInterval = 1 << 0, ///< Supervision Interval field present.
-        kLinkParamMaskServices            = 1 << 1, ///< Services bitmap field present.
-        // Bit 2 is reserved.
+        kLinkParamMaskSupervisionInterval = 1 << 0, ///< Supervision Interval field present (1 byte).
+        kLinkParamMaskServices            = 1 << 1, ///< Services bitmap field present (1 byte).
+        // Bit 2 is reserved (Short Address).
+        kLinkParamMaskClockAccuracy = 1 << 3, ///< Combined Clock Accuracy + Uncertainty field present (2 bytes).
+        // Bit 4 is reserved (Min Listen Duration).
     };
 
     /**
@@ -1355,18 +1357,20 @@ public:
     /**
      * Generates a Thread Direct Link Command frame (MAC Command 0x54 / Thread Cmd 0x02).
      *
-     * Sent by the Wake Listener to the Wake Initiator during the TD link handshake.
-     * The frame carries the WL's SCA LTV and a Challenge LTV inside a Thread Header IE.
-     * Optional payload fields (Supervision Interval, Services bitmap) are included when
-     * the corresponding pointer is non-null.
+     * Carries the sender's SCA LTV and (on the WL's handshake message) a Challenge LTV
+     * inside a Thread Header IE.  Optional payload fields (Supervision Interval, Services
+     * bitmap, Clock Accuracy + Uncertainty) are included when the corresponding pointer
+     * is non-null.  Clock Accuracy + Uncertainty are static per-device values exchanged
+     * at handshake only.
      *
      * @param[in] aPanId               The Thread network PAN ID.
-     * @param[in] aDstExtAddress       Extended address of the Wake Initiator (destination).
-     * @param[in] aSrcExtAddress       Extended address of the Wake Listener (source).
-     * @param[in] aScaParams           WL's SCA parameters to encode in the SCA LTV.
-     * @param[in] aChallenge           Challenge value to encode in the Challenge LTV.
+     * @param[in] aDstExtAddress       Extended address of the peer (destination).
+     * @param[in] aSrcExtAddress       Extended address of the sender (source).
+     * @param[in] aScaParams           Sender's SCA parameters to encode in the SCA LTV.
+     * @param[in] aChallenge           Challenge value to encode in the Challenge LTV, or nullptr to omit.
      * @param[in] aSupervisionInterval Pointer to the 1-byte Supervision Interval field, or nullptr to omit.
      * @param[in] aServices            Pointer to the 1-byte Services bitmap field, or nullptr to omit.
+     * @param[in] aClockAccuracyPair   Pointer to a 2-byte [Accuracy | Uncertainty] pair, or nullptr to omit.
      *
      * @retval kErrorNone   Frame generated successfully.
      * @retval kErrorNoBufs Insufficient PSDU space to fit all IEs and payload.
@@ -1377,7 +1381,8 @@ public:
                                           const ScaParams    &aScaParams,
                                           const ChallengeLtv *aChallenge,
                                           const uint8_t      *aSupervisionInterval,
-                                          const uint8_t      *aServices);
+                                          const uint8_t      *aServices,
+                                          const uint8_t      *aClockAccuracyPair);
 
     /**
      * Generates a Thread Direct teardown frame in this object.

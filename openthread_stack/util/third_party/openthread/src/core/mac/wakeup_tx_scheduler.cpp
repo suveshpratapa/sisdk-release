@@ -51,6 +51,7 @@ WakeupTxScheduler::WakeupTxScheduler(Instance &aInstance)
     , mTimer(aInstance)
     , mConnectionWindowTimer(aInstance)
     , mTdWakeState(kTdWakeIdle)
+    , mConnectionRetryCount(kConnectionRetryCount)
     , mIsRunning(false)
 {
     UpdateFrameRequestAhead();
@@ -166,7 +167,7 @@ Mac::TxFrame *WakeupTxScheduler::PrepareWakeupFrame(Mac::TxFrames &aTxFrames)
 
     IgnoreError(frame->GenerateThreadDirectWakeCommand(
         Get<Mac::Mac>().GetPanId(), mPeerExtAddress, Get<Mac::Mac>().GetExtAddress(), mWakeFrameType,
-        rendezvousTimeTenSym, kConnectionRetryInterval, kConnectionRetryCount));
+        rendezvousTimeTenSym, kConnectionRetryInterval, mConnectionRetryCount));
 
     frame->SetChannel(Get<Mac::Mac>().GetWakeupChannel());
     frame->SetCsmaCaEnabled(kWakeFrameTxCca);

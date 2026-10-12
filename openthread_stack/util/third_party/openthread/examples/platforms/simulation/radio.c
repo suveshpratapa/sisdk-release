@@ -1077,11 +1077,9 @@ static uint8_t generateThreadDirectEnhAckIe(const struct otRadioFrame *aReceived
 
     if (sRadioContext.mSlwPeriod != 0)
     {
-        sca.mHasSlw        = true;
-        sca.mSlwPeriod     = sRadioContext.mSlwPeriod;
-        sca.mRamOffsetUs   = sRadioContext.mRamOffsetUs;
-        sca.mClockAccuracy = otPlatRadioGetThreadDirectSlwAccuracy(NULL);
-        sca.mUncertainty   = otPlatRadioGetThreadDirectSlwUncertainty(NULL);
+        sca.mHasSlw      = true;
+        sca.mSlwPeriod   = sRadioContext.mSlwPeriod;
+        sca.mRamOffsetUs = sRadioContext.mRamOffsetUs;
         otMacFrameCalculateSlwPhaseAndRamOffset(sRadioContext.mSlwSampleTime, (uint32_t)otPlatTimeGet(),
                                                 sRadioContext.mSlwPeriod, sRadioContext.mSlwSlotDurationUs,
                                                 &sca.mSlwPhase, &sca.mRamOffsetUs);

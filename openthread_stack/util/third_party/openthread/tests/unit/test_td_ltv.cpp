@@ -97,19 +97,15 @@ void TestScaLtvRoundTrip(void)
     }
 
     // --- Case 2: No CoEx constraints, SLW Period=100, Phase=50 (mHasSlw=true) ---
-    // Fixed header: 0x0000; SLW Period LE = {0x64,0x00}; Phase LE = {0x32,0x00};
-    // Clock accuracy=20, uncertainty=10
-    // Plain LTV: [L=8][T=0x02][fixed 2B][period 2B][phase 2B][acc][uncert] = 10 bytes
+    // Fixed header: 0x0000; SLW Period LE = {0x64,0x00}; Phase LE = {0x32,0x00}
+    // Plain LTV: [L=6][T=0x02][fixed 2B][period 2B][phase 2B] = 8 bytes
     {
         ScaParams params;
         memset(&params, 0, sizeof(params));
-        params.mRamAvailable     = false;
-        params.mHasSlw           = true;
-        params.mHasClockAccuracy = true;
-        params.mSlwPeriodSlots   = 100;
-        params.mSlwPhaseSlots    = 50;
-        params.mClockAccuracy    = 20;
-        params.mUncertainty      = 10;
+        params.mRamAvailable   = false;
+        params.mHasSlw         = true;
+        params.mSlwPeriodSlots = 100;
+        params.mSlwPhaseSlots  = 50;
 
         uint8_t      buf[32];
         FrameBuilder fb;
@@ -117,19 +113,16 @@ void TestScaLtvRoundTrip(void)
 
         VerifyOrQuit(AppendScaLtv(fb, params) == kErrorNone);
 
-        VerifyOrQuit(fb.GetLength() == 10); // [L=8][T=0x02][fixed 2B][period 2B][phase 2B][acc][uncert]
+        VerifyOrQuit(fb.GetLength() == 8); // [L=6][T=0x02][fixed 2B][period 2B][phase 2B]
 
         ScaParams out;
         memset(&out, 0, sizeof(out));
         VerifyOrQuit(PackAndParse(buf, fb.GetLength(), &out, nullptr) == kErrorNone);
         VerifyOrQuit(!out.mRamAvailable);
         VerifyOrQuit(out.mHasSlw);
-        VerifyOrQuit(out.mHasClockAccuracy);
         VerifyOrQuit(out.mRamOffsetUs == 0);
         VerifyOrQuit(out.mSlwPeriodSlots == 100);
         VerifyOrQuit(out.mSlwPhaseSlots == 50);
-        VerifyOrQuit(out.mClockAccuracy == 20);
-        VerifyOrQuit(out.mUncertainty == 10);
     }
 
     // --- Case 3: No CoEx, negative RAM Offset=-512, SLW Period=4095, Phase=4095 ---
@@ -139,14 +132,11 @@ void TestScaLtvRoundTrip(void)
     {
         ScaParams params;
         memset(&params, 0, sizeof(params));
-        params.mRamAvailable     = false;
-        params.mHasSlw           = true;
-        params.mHasClockAccuracy = true;
-        params.mRamOffsetUs      = -512;
-        params.mSlwPeriodSlots   = 4095;
-        params.mSlwPhaseSlots    = 4095;
-        params.mClockAccuracy    = 20;
-        params.mUncertainty      = 10;
+        params.mRamAvailable   = false;
+        params.mHasSlw         = true;
+        params.mRamOffsetUs    = -512;
+        params.mSlwPeriodSlots = 4095;
+        params.mSlwPhaseSlots  = 4095;
 
         uint8_t      buf[32];
         FrameBuilder fb;
@@ -154,7 +144,7 @@ void TestScaLtvRoundTrip(void)
 
         VerifyOrQuit(AppendScaLtv(fb, params) == kErrorNone);
 
-        VerifyOrQuit(fb.GetLength() == 10);
+        VerifyOrQuit(fb.GetLength() == 8);
         VerifyOrQuit(buf[2] == 0x00 && buf[3] == 0x18); // fixed header LE = 0x1800
 
         ScaParams out;
@@ -164,9 +154,6 @@ void TestScaLtvRoundTrip(void)
         VerifyOrQuit(out.mRamOffsetUs == -512);
         VerifyOrQuit(out.mSlwPeriodSlots == 4095);
         VerifyOrQuit(out.mSlwPhaseSlots == 4095);
-        VerifyOrQuit(out.mHasClockAccuracy);
-        VerifyOrQuit(out.mClockAccuracy == 20);
-        VerifyOrQuit(out.mUncertainty == 10);
     }
 
     // --- Case 4: Teardown (AppendScaLtvTeardown emits zero-length SCA LTV) ---
@@ -230,23 +217,20 @@ void TestScaLtvRoundTrip(void)
 
     // --- Case 6: mRamAvailable=true, mRamDuration=32 (four RAM bytes), RamOffset=1023, SLW Period=200, Phase=75 ---
     // RamOffset=1023: rawOffset11=0x03FF; fixed header=(0x03FF<<2)|(1<<13)=0x0FFC|0x2000=0x2FFC LE {0xFC,0x2F}
-    // Value: [fixed 2B][RamDur 0x20][4 RamBits bytes][Period LE 2B][Phase LE 2B][acc][uncert] = 13 bytes
+    // Value: [fixed 2B][RamDur 0x20][4 RamBits bytes][Period LE 2B][Phase LE 2B] = 11 bytes
     {
         ScaParams params;
         memset(&params, 0, sizeof(params));
-        params.mRamAvailable     = true;
-        params.mRamDuration      = 32;
-        params.mRamOffsetUs      = 1023;
-        params.mHasSlw           = true;
-        params.mHasClockAccuracy = true;
-        params.mSlwPeriodSlots   = 200;
-        params.mSlwPhaseSlots    = 75;
-        params.mClockAccuracy    = 20;
-        params.mUncertainty      = 10;
-        params.mRamBits[0]       = 0x11;
-        params.mRamBits[1]       = 0x22;
-        params.mRamBits[2]       = 0x33;
-        params.mRamBits[3]       = 0x44;
+        params.mRamAvailable   = true;
+        params.mRamDuration    = 32;
+        params.mRamOffsetUs    = 1023;
+        params.mHasSlw         = true;
+        params.mSlwPeriodSlots = 200;
+        params.mSlwPhaseSlots  = 75;
+        params.mRamBits[0]     = 0x11;
+        params.mRamBits[1]     = 0x22;
+        params.mRamBits[2]     = 0x33;
+        params.mRamBits[3]     = 0x44;
 
         uint8_t      buf[64];
         FrameBuilder fb;
@@ -254,13 +238,12 @@ void TestScaLtvRoundTrip(void)
 
         VerifyOrQuit(AppendScaLtv(fb, params) == kErrorNone);
 
-        VerifyOrQuit(fb.GetLength() == 15);             // [L=13][T=0x02] + 13 value bytes
+        VerifyOrQuit(fb.GetLength() == 13);             // [L=11][T=0x02] + 11 value bytes
         VerifyOrQuit(buf[2] == 0xFC && buf[3] == 0x2F); // fixed header LE = 0x2FFC
         VerifyOrQuit(buf[4] == 0x20);                   // RAM Duration = 32
         VerifyOrQuit(buf[5] == 0x11 && buf[6] == 0x22 && buf[7] == 0x33 && buf[8] == 0x44);
         VerifyOrQuit(buf[9] == 0xC8 && buf[10] == 0x00);  // SLW Period=200 LE
         VerifyOrQuit(buf[11] == 0x4B && buf[12] == 0x00); // SLW Phase=75 LE
-        VerifyOrQuit(buf[13] == 20 && buf[14] == 10);
 
         ScaParams out;
         memset(&out, 0, sizeof(out));
@@ -273,11 +256,8 @@ void TestScaLtvRoundTrip(void)
         VerifyOrQuit(out.mRamBits[2] == 0x33);
         VerifyOrQuit(out.mRamBits[3] == 0x44);
         VerifyOrQuit(out.mHasSlw);
-        VerifyOrQuit(out.mHasClockAccuracy);
         VerifyOrQuit(out.mSlwPeriodSlots == 200);
         VerifyOrQuit(out.mSlwPhaseSlots == 75);
-        VerifyOrQuit(out.mClockAccuracy == 20);
-        VerifyOrQuit(out.mUncertainty == 10);
     }
 
     printf("PASSED\n");
@@ -390,13 +370,10 @@ void TestMultiLtvParse(void)
 
     ScaParams scaIn;
     memset(&scaIn, 0, sizeof(scaIn));
-    scaIn.mRamAvailable     = false;
-    scaIn.mHasSlw           = true;
-    scaIn.mHasClockAccuracy = true;
-    scaIn.mSlwPeriodSlots   = 48;
-    scaIn.mSlwPhaseSlots    = 12;
-    scaIn.mClockAccuracy    = 20;
-    scaIn.mUncertainty      = 10;
+    scaIn.mRamAvailable   = false;
+    scaIn.mHasSlw         = true;
+    scaIn.mSlwPeriodSlots = 48;
+    scaIn.mSlwPhaseSlots  = 12;
 
     const uint8_t kChallengeBytes[ChallengeLtv::kLength] = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE,
                                                             0xFE, 0xED, 0xFA, 0xCE, 0xD0, 0xC0, 0xFF, 0xEE};
@@ -419,11 +396,8 @@ void TestMultiLtvParse(void)
 
     VerifyOrQuit(!scaOut.mRamAvailable);
     VerifyOrQuit(scaOut.mHasSlw);
-    VerifyOrQuit(scaOut.mHasClockAccuracy);
     VerifyOrQuit(scaOut.mSlwPeriodSlots == 48);
     VerifyOrQuit(scaOut.mSlwPhaseSlots == 12);
-    VerifyOrQuit(scaOut.mClockAccuracy == 20);
-    VerifyOrQuit(scaOut.mUncertainty == 10);
     VerifyOrQuit(memcmp(chalOut.mChallenge, kChallengeBytes, ChallengeLtv::kLength) == 0);
 
     printf("PASSED\n");
@@ -515,15 +489,12 @@ void TestMaxCoExRoundTrip(void)
 
     ScaParams scaIn;
     memset(&scaIn, 0, sizeof(scaIn));
-    scaIn.mRamAvailable     = true;
-    scaIn.mRamDuration      = 255;
-    scaIn.mRamOffsetUs      = -100;
-    scaIn.mHasSlw           = true;
-    scaIn.mHasClockAccuracy = true;
-    scaIn.mSlwPeriodSlots   = 500;
-    scaIn.mSlwPhaseSlots    = 100;
-    scaIn.mClockAccuracy    = 20;
-    scaIn.mUncertainty      = 10;
+    scaIn.mRamAvailable   = true;
+    scaIn.mRamDuration    = 255;
+    scaIn.mRamOffsetUs    = -100;
+    scaIn.mHasSlw         = true;
+    scaIn.mSlwPeriodSlots = 500;
+    scaIn.mSlwPhaseSlots  = 100;
 
     for (uint8_t i = 0; i < ScaParams::kRamBitsMaxBytes; i++)
     {
@@ -559,11 +530,8 @@ void TestMaxCoExRoundTrip(void)
     VerifyOrQuit(scaOut.mRamDuration == 255);
     VerifyOrQuit(scaOut.mRamOffsetUs == -100);
     VerifyOrQuit(scaOut.mHasSlw);
-    VerifyOrQuit(scaOut.mHasClockAccuracy);
     VerifyOrQuit(scaOut.mSlwPeriodSlots == 500);
     VerifyOrQuit(scaOut.mSlwPhaseSlots == 100);
-    VerifyOrQuit(scaOut.mClockAccuracy == 20);
-    VerifyOrQuit(scaOut.mUncertainty == 10);
 
     for (uint8_t i = 0; i < ScaParams::kRamBitsMaxBytes; i++)
     {

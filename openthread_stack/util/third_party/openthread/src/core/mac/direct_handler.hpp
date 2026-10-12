@@ -356,6 +356,12 @@ private:
 #endif
 
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
+    // Time spent computing the Listener challenge before the TD Link Command can be given to the radio.
+    static constexpr uint32_t kWlLinkCmdChallengeUs = 4000;
+
+    // Longest frame on the bus is 127 bytes plus metadata. Matches the CSL and supervision estimate.
+    static constexpr uint16_t kMaxTdLinkCmdFrameSize = 150;
+
     static constexpr uint32_t kWlPeerTdLinkCmdTimeoutPeriods =
         OPENTHREAD_CONFIG_THREAD_DIRECT_WL_PEER_TD_LINK_CMD_TIMEOUT_PERIODS;
 
@@ -366,24 +372,32 @@ private:
     enum WlState : uint8_t
     {
         kWlIdle,                 ///< No handshake in progress.
-        kWlAttachDelay,          ///< Waiting for rendezvous time before sending TD Link Command.
-        kWlWaitingEnhAck,        ///< TD Link Command TX pending or sent; waiting for Enh-ACK.
+        kWlAttachDelay,          ///< Waiting to prepare the first TD Link Command before the rendezvous time.
+        kWlWaitingEnhAck,        ///< TD Link Command attempt in progress, including later connection windows.
         kWlWaitingPeerTdLinkCmd, ///< Challenge was echoed; waiting for the peer's TD Link Command.
     };
 
-    void HandleWlStateTimer(void);
-    void StartWlPeerTdLinkCmdTimeout(void);
-    void ResumeWakeListening(void);
-    bool TryAddWlPeer(const Mac::ExtAddress &aPeerAddr, const Mac::ScaParams &aPeerSca, uint64_t aRxTimestamp);
+    void     HandleWlPeerTdLinkCmdTimeout(void);
+    void     HandleWlStateTimer(void);
+    void     StartWlPeerTdLinkCmdTimeout(void);
+    void     ResumeWakeListening(void);
+    bool     TryAddWlPeer(const Mac::ExtAddress &aPeerAddr, const Mac::ScaParams &aPeerSca, uint64_t aRxTimestamp);
+    void     ScheduleWlLinkCmdPrepare(void);
+    uint32_t GetWlLinkCmdLeadUs(void) const;
+    uint64_t GetWlLinkCmdWindowStartUs(uint8_t aWindowIndex) const;
+    bool     ScheduleNextWlLinkCmdWindow(void);
 
-    using WlStateTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleWlStateTimer>;
+    using WlPeerTdLinkCmdTimer = TimerMilliIn<DirectHandler, &DirectHandler::HandleWlPeerTdLinkCmdTimeout>;
+    using WlStateTimer         = TimerMicroIn<DirectHandler, &DirectHandler::HandleWlStateTimer>;
 
-    WlState           mWlState;
-    Mac::WakeupInfo   mWakeupInfo;
-    Mac::ChallengeLtv mWlChallenge;
-    Mac::ScaParams    mWlEnhAckSca;
-    bool              mHasWlEnhAckSca;
-    WlStateTimer      mWlStateTimer;
+    WlState              mWlState;
+    uint8_t              mWlCurrentRetryCount;
+    Mac::WakeupInfo      mWakeupInfo;
+    Mac::ChallengeLtv    mWlChallenge;
+    Mac::ScaParams       mWlEnhAckSca;
+    bool                 mHasWlEnhAckSca;
+    WlPeerTdLinkCmdTimer mWlPeerTdLinkCmdTimer;
+    WlStateTimer         mWlStateTimer;
 #endif
     void UpdateDerivedSlwTiming(void);
 

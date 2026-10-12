@@ -419,6 +419,9 @@ Error KeyManager::ComputeChallenge(uint8_t            aKeyIndex,
     uint8_t                  rawKey[Mac::Key::kSize];
     uint8_t                  word[sizeof(uint32_t)];
     uint8_t                  wakeId[kWakeIdSize];
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    Crypto::Storage::KeyRef challengeKeyRef = Crypto::Storage::kInvalidKeyRef;
+#endif
 
     if (aKeyIndex == Mac::Frame::kWakeKeyIndex)
     {
@@ -453,7 +456,15 @@ Error KeyManager::ComputeChallenge(uint8_t            aKeyIndex,
 #endif
     }
 
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    SuccessOrExit(error = Crypto::Storage::ImportKey(challengeKeyRef, Crypto::Storage::kKeyTypeHmac,
+                                                     Crypto::Storage::kKeyAlgorithmHmacSha256,
+                                                     Crypto::Storage::kUsageSignHash | Crypto::Storage::kUsageExport,
+                                                     Crypto::Storage::kTypeVolatile, rawKey, Mac::Key::kSize));
+    challengeKey.SetAsKeyRef(challengeKeyRef);
+#else
     challengeKey.Set(rawKey, Mac::Key::kSize);
+#endif
     hmac.Start(challengeKey);
 
     BigEndian::WriteUint32(aLinkFrameCounter, word);
@@ -479,6 +490,9 @@ Error KeyManager::ComputeChallenge(uint8_t            aKeyIndex,
     memcpy(aChallenge.mChallenge, hash.m8, Mac::ChallengeLtv::kLength);
 
 exit:
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    Crypto::Storage::DestroyKey(challengeKeyRef);
+#endif
     return error;
 }
 #endif // OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE

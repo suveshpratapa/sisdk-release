@@ -458,6 +458,7 @@ Radio::Radio(void)
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     ClearAllBytes(mWakeKeys);
     memset(mWakeKeySet, 0, sizeof(mWakeKeySet));
+    mCorruptTdEnhAckChallenge = false;
 #endif
 }
 
@@ -479,6 +480,7 @@ void Radio::Reset(void)
 #if OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INITIATOR_ENABLE || OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_LISTENER_ENABLE
     ClearAllBytes(mWakeKeys);
     memset(mWakeKeySet, 0, sizeof(mWakeKeySet));
+    mCorruptTdEnhAckChallenge = false;
 #endif
 }
 

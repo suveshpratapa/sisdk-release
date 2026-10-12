@@ -69,12 +69,12 @@ void DirectPeer::SetSca(const Mac::ScaParams &aSca)
     mSlwPhaseUs        = mSlwSlotDurationUs * aSca.mSlwPhaseSlots;
     mSlwPeriodSlots    = aSca.mSlwPeriodSlots;
     mSlwPhaseSlots     = aSca.mSlwPhaseSlots;
+}
 
-    if (aSca.mHasClockAccuracy)
-    {
-        mSlwAccuracy.SetClockAccuracy(aSca.mClockAccuracy);
-        mSlwAccuracy.SetUncertainty(aSca.mUncertainty);
-    }
+void DirectPeer::SetClockAccuracy(uint8_t aAccuracy, uint8_t aUncertainty)
+{
+    mSlwAccuracy.SetClockAccuracy(aAccuracy);
+    mSlwAccuracy.SetUncertainty(aUncertainty);
 }
 
 void DirectPeer::UpdateSca(const Mac::ScaParams &aSca, uint64_t aRxTimestamp)

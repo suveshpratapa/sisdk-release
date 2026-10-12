@@ -1635,7 +1635,8 @@ Error TxFrame::GenerateThreadDirectLinkCommand(PanId               aPanId,
                                                const ScaParams    &aScaParams,
                                                const ChallengeLtv *aChallenge,
                                                const uint8_t      *aSupervisionInterval,
-                                               const uint8_t      *aServices)
+                                               const uint8_t      *aServices,
+                                               const uint8_t      *aClockAccuracyPair)
 {
     Error        error;
     uint16_t     fcf;
@@ -1699,6 +1700,11 @@ Error TxFrame::GenerateThreadDirectLinkCommand(PanId               aPanId,
         linkParamMask |= kLinkParamMaskServices;
     }
 
+    if (aClockAccuracyPair != nullptr)
+    {
+        linkParamMask |= kLinkParamMaskClockAccuracy;
+    }
+
     IgnoreError(builder.AppendUint8(linkParamMask));
 
     if (aSupervisionInterval != nullptr)
@@ -1709,6 +1715,11 @@ Error TxFrame::GenerateThreadDirectLinkCommand(PanId               aPanId,
     if (aServices != nullptr)
     {
         IgnoreError(builder.AppendUint8(*aServices));
+    }
+
+    if (aClockAccuracyPair != nullptr)
+    {
+        IgnoreError(builder.AppendBytes(aClockAccuracyPair, 2u));
     }
 
     builder.AppendLength(CalculateMicSize(secCtl) + GetFcsSize());

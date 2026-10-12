@@ -3334,7 +3334,6 @@ Error Mac::HandleWakeupFrame(const RxFrame &aFrame)
     WakeupInfo     wakeupInfo;
     uint32_t       rvTimeUs;
     uint64_t       rvTimestampUs;
-    uint64_t       radioNowUs;
 
     VerifyOrExit(mWakeupListenEnabled && aFrame.IsTdWakeCommand());
 
@@ -3361,16 +3360,13 @@ Error Mac::HandleWakeupFrame(const RxFrame &aFrame)
         wakeupInfo.mRetryCount       = retryByte & 0x0f;
     }
 
-    VerifyOrExit(wakeupInfo.mRetryInterval > 0 && wakeupInfo.mRetryCount > 0, error = kErrorInvalidArgs);
+    // Retry Interval 0 is invalid. Retry Count 0 is a single connection window at the rendezvous time.
+    VerifyOrExit(wakeupInfo.mRetryInterval > 0, error = kErrorInvalidArgs);
 
     rvTimeUs = static_cast<uint32_t>(payload[kPayloadRvTimeOffset]) * kUsPerTenSymbols;
 
-    radioNowUs    = otPlatRadioGetNow(&GetInstance());
     rvTimestampUs = aFrame.GetTimestamp() + kRadioHeaderPhrDuration + aFrame.GetLength() * kOctetDuration + rvTimeUs;
-
-    wakeupInfo.mAttachDelayUs = (rvTimestampUs > radioNowUs + kCslRequestAhead)
-                                    ? static_cast<uint32_t>(rvTimestampUs - radioNowUs - kCslRequestAhead)
-                                    : 0;
+    wakeupInfo.mRendezvousTimeUs = rvTimestampUs;
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO)
     {

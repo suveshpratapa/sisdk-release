@@ -124,6 +124,14 @@ public:
     void UpdateSca(const Mac::ScaParams &aSca, uint64_t aRxTimestamp);
 
     /**
+     * Caches the peer's Clock Accuracy and Uncertainty (advertised on the TD Link Command).
+     *
+     * @param[in] aAccuracy     Clock accuracy in ppm.
+     * @param[in] aUncertainty  Clock uncertainty in 10 us units.
+     */
+    void SetClockAccuracy(uint8_t aAccuracy, uint8_t aUncertainty);
+
+    /**
      * Indicates whether the peer advertises an SLW schedule.
      *
      * @retval TRUE   The peer advertises an SLW schedule.

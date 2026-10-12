@@ -975,11 +975,11 @@ private:
 struct WakeupInfo
 {
     ExtAddress mExtAddress;        ///< Extended address of the Wake Initiator.
-    uint32_t   mAttachDelayUs;     ///< Rendezvous Time converted to us offset before sending TD Link Command.
+    uint64_t   mRendezvousTimeUs;  ///< Absolute radio time at which the Listener TD Link Command should start.
     uint32_t   mWakeFrameCounter;  ///< Frame counter from the received Wake Frame (used in Challenge HMAC).
     uint8_t    mWakeKeyIndex;      ///< Key index from the Wake Frame Aux Security Header (129 or 130-192).
     uint8_t    mRetryInterval : 4; ///< Retry Interval (RI field from Wake Frame, 4-bit wire value).
-    uint8_t    mRetryCount : 4;    ///< Retry Count (RC field from Wake Frame, 4-bit wire value).
+    uint8_t    mRetryCount : 4;    ///< Retry Count (RC field from Wake Frame). Windows are k = 0..RC.
 };
 #endif
 

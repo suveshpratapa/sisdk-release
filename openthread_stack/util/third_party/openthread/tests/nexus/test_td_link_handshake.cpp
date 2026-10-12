@@ -31,10 +31,12 @@
 
 #include <openthread/thread_direct.h>
 
+#include "mac/wakeup_tx_scheduler.hpp"
 #include "net/ip6.hpp"
 #include "net/udp6.hpp"
 #include "platform/nexus_core.hpp"
 #include "platform/nexus_node.hpp"
+#include "thread/direct_peer_table.hpp"
 #include "thread/mle.hpp"
 namespace ot {
 namespace Nexus {
@@ -55,6 +57,8 @@ struct TdEventInfo
     uint32_t            mLinkFailedCount;
     uint32_t            mUnlinkedCount;
     uint32_t            mWakeReceivedCount;
+    uint8_t             mLastWakeRetryCount;
+    uint8_t             mLastWakeRetryInterval;
     otThreadDirectEvent mLastEvent;
     otExtAddress        mLastPeerAddr;
 };
@@ -83,6 +87,13 @@ static void HandleTdEvent(otThreadDirectEvent aEvent, const otThreadDirectPeerIn
         break;
     case OT_THREAD_DIRECT_EVENT_WAKE_RECEIVED:
         info->mWakeReceivedCount++;
+
+        if (aPeerInfo != nullptr)
+        {
+            info->mLastWakeRetryCount    = aPeerInfo->mWakeRetryCount;
+            info->mLastWakeRetryInterval = aPeerInfo->mWakeRetryInterval;
+        }
+
         break;
     default:
         break;
@@ -297,6 +308,207 @@ void TestTdLinkHandshakeGuestKey(void)
 
     Log("---------------------------------------------------------------------------------------");
     Log("Step 7: Verify both sides received UNLINKED event");
+
+    VerifyOrQuit(wiEvents.mUnlinkedCount == 1);
+    VerifyOrQuit(wlEvents.mUnlinkedCount == 1);
+}
+
+// Verifies that each peer's Clock Accuracy and Clock Uncertainty are exchanged
+// on the TD Link Command (Link Parameter Mask bit 3) at handshake time and
+// stored on the receiving DirectPeer.  The Nexus radio platform reports 20 ppm
+// and 10 uncertainty units for both nodes; after LINKED, DirectPeer.GetSlwAccuracy()
+// on each side must reflect the peer's advertised values.
+void TestTdLinkHandshakeExchangesClockAccuracy(void)
+{
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    {
+        const otExtAddress &wlAddr = *reinterpret_cast<const otExtAddress *>(&wl.mRadio.mExtAddress);
+
+        SuccessOrQuit(otThreadDirectWakeup(&wi.GetInstance(), &wlAddr, OT_THREAD_DIRECT_WAKE_TYPE_LINK, 0, 0, 0));
+    }
+
+    nexus.AdvanceTime(kHandshakeTimeMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkedCount == 1);
+
+    // Nexus radio hard-codes 20 ppm / 10 units for both nodes; both peers must
+    // have picked those up from mask bit 3 on the received TD Link Commands.
+    {
+        Mac::ExtAddress wiExt;
+        Mac::ExtAddress wlExt;
+
+        memcpy(wiExt.m8, &wi.mRadio.mExtAddress, sizeof(wiExt.m8));
+        memcpy(wlExt.m8, &wl.mRadio.mExtAddress, sizeof(wlExt.m8));
+
+        DirectPeer *wlPeerOnWi = wi.Get<DirectPeerTable>().FindPeer(wlExt, DirectPeer::kInStateValid);
+        DirectPeer *wiPeerOnWl = wl.Get<DirectPeerTable>().FindPeer(wiExt, DirectPeer::kInStateValid);
+
+        VerifyOrQuit(wlPeerOnWi != nullptr);
+        VerifyOrQuit(wiPeerOnWl != nullptr);
+
+        VerifyOrQuit(wlPeerOnWi->GetSlwAccuracy().GetClockAccuracy() == 20);
+        VerifyOrQuit(wlPeerOnWi->GetSlwAccuracy().GetUncertainty() == 10);
+        VerifyOrQuit(wiPeerOnWl->GetSlwAccuracy().GetClockAccuracy() == 20);
+        VerifyOrQuit(wiPeerOnWl->GetSlwAccuracy().GetUncertainty() == 10);
+    }
+
+    // Clean teardown so subsequent tests start from a clean slate.
+    {
+        const otExtAddress &wlAddr = *reinterpret_cast<const otExtAddress *>(&wl.mRadio.mExtAddress);
+
+        SuccessOrQuit(otThreadDirectUnlink(&wi.GetInstance(), &wlAddr));
+    }
+
+    nexus.AdvanceTime(kTeardownTimeMs);
+
+    VerifyOrQuit(wiEvents.mUnlinkedCount == 1);
+    VerifyOrQuit(wlEvents.mUnlinkedCount == 1);
+}
+
+// Handshake with a shared guest key but a *different* network key on each
+// side.  The WI follow-up TD Link Command must be secured with the guest key.
+void TestTdLinkHandshakeGuestKeyMismatchedNetworkKeys(void)
+{
+    static constexpr uint8_t kWiNetworkKey[OT_NETWORK_KEY_SIZE] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                                                                   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10};
+    static constexpr uint8_t kWlNetworkKey[OT_NETWORK_KEY_SIZE] = {0xf0, 0xe0, 0xd0, 0xc0, 0xb0, 0xa0, 0x90, 0x80,
+                                                                   0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10, 0x00};
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI");
+    wl.SetName("WL");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    SuccessOrQuit(Instance::SetGlobalLogLevel(kLogLevelDebg));
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 1: Configure WI and WL with *different* network keys, share a guest key at index 130");
+
+    {
+        otNetworkKey wiKey;
+        otNetworkKey wlKey;
+
+        memcpy(wiKey.m8, kWiNetworkKey, sizeof(kWiNetworkKey));
+        memcpy(wlKey.m8, kWlNetworkKey, sizeof(kWlNetworkKey));
+
+        SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &wiKey));
+        SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &wlKey));
+    }
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    {
+        otThreadDirectWakeKey guestKey;
+
+        memcpy(guestKey.m8, kGuestKey, sizeof(guestKey.m8));
+
+        SuccessOrQuit(otThreadDirectSetGuestWakeKey(&wi.GetInstance(), kGuestKeyIndex, &guestKey));
+        SuccessOrQuit(otThreadDirectSetGuestWakeKey(&wl.GetInstance(), kGuestKeyIndex, &guestKey));
+    }
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 2: Register TD event callbacks and enable WL wake listen");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 3: WI starts wake burst using guest key index 130");
+
+    {
+        const otExtAddress &wlAddr = *reinterpret_cast<const otExtAddress *>(&wl.mRadio.mExtAddress);
+
+        SuccessOrQuit(
+            otThreadDirectWakeup(&wi.GetInstance(), &wlAddr, OT_THREAD_DIRECT_WAKE_TYPE_LINK, 0, 0, kGuestKeyIndex));
+    }
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 4: Advance time for the full handshake (wake, WL TD Link Cmd, Enh-ACK, WI follow-up)");
+
+    nexus.AdvanceTime(kHandshakeTimeMs);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 5: Both sides must fire LINKED -- only possible if the WI follow-up used the guest key");
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkedCount == 1);
+    VerifyOrQuit(wiEvents.mLinkFailedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Step 6: WI initiates teardown; both sides fire UNLINKED (also secured by the guest key)");
+
+    {
+        const otExtAddress &wlAddr = *reinterpret_cast<const otExtAddress *>(&wl.mRadio.mExtAddress);
+
+        SuccessOrQuit(otThreadDirectUnlink(&wi.GetInstance(), &wlAddr));
+    }
+
+    nexus.AdvanceTime(kTeardownTimeMs);
 
     VerifyOrQuit(wiEvents.mUnlinkedCount == 1);
     VerifyOrQuit(wlEvents.mUnlinkedCount == 1);
@@ -1020,6 +1232,363 @@ void TestTdLinkHandshakeShortPeriodLargeFrame(void)
     SuccessOrQuit(wi.Get<Ip6::Udp>().Close(wiRxSocket));
 }
 
+void TestTdLinkHandshakeRetriesThenLinks(void)
+{
+    static constexpr uint32_t kMissedWindowsMs = 100;
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-retry");
+    wl.SetName("WL-retry");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Retry Step 1: Configure both nodes with a shared network key");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Retry Step 2: Register TD event callbacks, enable WL wake listen, and start wake burst");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Retry Step 3: Wait until the WL accepts a Wake Frame");
+
+    for (uint32_t elapsedMs = 0; elapsedMs < 500; elapsedMs++)
+    {
+        nexus.AdvanceTime(1);
+
+        if (wlEvents.mWakeReceivedCount >= 1)
+        {
+            break;
+        }
+    }
+
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+    VerifyOrQuit(wiEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Retry Step 4: Silence the WI across the first connection windows");
+
+    wi.Get<Mac::Mac>().SetRadioFilterEnabled(true);
+    VerifyOrQuit(wi.Get<Mac::Mac>().IsRadioFilterEnabled());
+
+    nexus.AdvanceTime(kMissedWindowsMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Retry Step 5: Restore the WI and let a later window complete the handshake");
+
+    wi.Get<Mac::Mac>().SetRadioFilterEnabled(false);
+
+    nexus.AdvanceTime(kHandshakeTimeMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+}
+
+void TestTdLinkHandshakeRetriesExhausted(void)
+{
+    static constexpr uint32_t kRetryWindowMs =
+        (OPENTHREAD_CONFIG_THREAD_DIRECT_CONNECTION_RETRY_INTERVAL * OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INTERVAL_US) /
+        1000;
+    static constexpr uint32_t kAllWindowsMs =
+        100 + (OPENTHREAD_CONFIG_THREAD_DIRECT_CONNECTION_RETRY_COUNT * kRetryWindowMs);
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo            wiEvents;
+    TdEventInfo            wlEvents;
+    otThreadDirectPeerInfo peerInfo;
+    const otExtAddress    &wiAddr = *reinterpret_cast<const otExtAddress *>(&wi.mRadio.mExtAddress);
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-retry-exhaust");
+    wl.SetName("WL-retry-exhaust");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Exhaust Step 1: Configure both nodes with a shared network key");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Exhaust Step 2: Register TD event callbacks, enable WL wake listen, and start wake burst");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Exhaust Step 3: Wait until the WL accepts a Wake Frame");
+
+    for (uint32_t elapsedMs = 0; elapsedMs < 500; elapsedMs++)
+    {
+        nexus.AdvanceTime(1);
+
+        if (wlEvents.mWakeReceivedCount >= 1)
+        {
+            break;
+        }
+    }
+
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Exhaust Step 4: Keep the WI silent through every connection window");
+
+    wi.Get<Mac::Mac>().SetRadioFilterEnabled(true);
+    VerifyOrQuit(wi.Get<Mac::Mac>().IsRadioFilterEnabled());
+
+    nexus.AdvanceTime(kAllWindowsMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+    VerifyOrQuit(otThreadDirectGetPeerInfo(&wl.GetInstance(), &wiAddr, &peerInfo) == OT_ERROR_NOT_FOUND);
+
+    wi.Get<Mac::Mac>().SetRadioFilterEnabled(false);
+}
+
+void TestTdLinkHandshakeChallengeMismatchExhaustsRetries(void)
+{
+    // Long enough for the first connection window, and short of the full retry budget.
+    // A mismatch that keeps scheduling windows leaves wake listening disabled through this wait.
+    static constexpr uint32_t kRetryWindowMs =
+        (OPENTHREAD_CONFIG_THREAD_DIRECT_CONNECTION_RETRY_INTERVAL * OPENTHREAD_CONFIG_THREAD_DIRECT_WAKE_INTERVAL_US) /
+        1000;
+    static constexpr uint32_t kFirstWindowMs = 100;
+    static constexpr uint32_t kFullBudgetMs =
+        100 + (OPENTHREAD_CONFIG_THREAD_DIRECT_CONNECTION_RETRY_COUNT * kRetryWindowMs);
+
+    static_assert(kFirstWindowMs < kFullBudgetMs, "mismatch wait must end before the retry budget");
+
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo            wiEvents;
+    TdEventInfo            wlEvents;
+    otThreadDirectPeerInfo peerInfo;
+    const otExtAddress    &wiAddr = *reinterpret_cast<const otExtAddress *>(&wi.mRadio.mExtAddress);
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-challenge-mismatch");
+    wl.SetName("WL-challenge-mismatch");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Mismatch Step 1: Configure both nodes with a shared network key");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Mismatch Step 2: Register TD event callbacks, enable WL wake listen, and start wake burst");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Mismatch Step 3: Wait until the WL accepts a Wake Frame");
+
+    for (uint32_t elapsedMs = 0; elapsedMs < 500; elapsedMs++)
+    {
+        nexus.AdvanceTime(1);
+
+        if (wlEvents.mWakeReceivedCount >= 1)
+        {
+            break;
+        }
+    }
+
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+    VerifyOrQuit(!otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Mismatch Step 4: Corrupt the WI's echoed challenge and wait for the first connection window");
+
+    wi.mRadio.mCorruptTdEnhAckChallenge = true;
+
+    nexus.AdvanceTime(kFirstWindowMs);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("Mismatch Step 5: Verify the WL exhausted the handshake without using the remaining windows");
+
+    VerifyOrQuit(!wi.mRadio.mCorruptTdEnhAckChallenge);
+    VerifyOrQuit(wlEvents.mLinkedCount == 0);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+    VerifyOrQuit(otThreadDirectGetPeerInfo(&wl.GetInstance(), &wiAddr, &peerInfo) == OT_ERROR_NOT_FOUND);
+}
+
+void TestTdLinkHandshakeRetryCountZeroLinks(void)
+{
+    Core nexus;
+
+    Node &wi = nexus.CreateNode();
+    Node &wl = nexus.CreateNode();
+
+    TdEventInfo wiEvents;
+    TdEventInfo wlEvents;
+
+    memset(&wiEvents, 0, sizeof(wiEvents));
+    memset(&wlEvents, 0, sizeof(wlEvents));
+
+    wi.SetName("WI-retry-count-0");
+    wl.SetName("WL-retry-count-0");
+
+    AllowLinkBetween(wi, wl);
+
+    nexus.AdvanceTime(0);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("RetryCount0 Step 1: Configure both nodes with a shared network key");
+
+    otNetworkKey networkKey;
+    memcpy(networkKey.m8, kNetworkKey, sizeof(kNetworkKey));
+
+    SuccessOrQuit(otThreadSetNetworkKey(&wi.GetInstance(), &networkKey));
+    SuccessOrQuit(otThreadSetNetworkKey(&wl.GetInstance(), &networkKey));
+
+    SuccessOrQuit(otLinkSetPanId(&wi.GetInstance(), kPanId));
+    SuccessOrQuit(otLinkSetPanId(&wl.GetInstance(), kPanId));
+
+    SuccessOrQuit(otIp6SetEnabled(&wi.GetInstance(), true));
+    SuccessOrQuit(otIp6SetEnabled(&wl.GetInstance(), true));
+
+    nexus.AdvanceTime(100);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("RetryCount0 Step 2: Enable WL wake listen and send a Wake Frame with retry count 0");
+
+    otThreadDirectSetEventCallback(&wi.GetInstance(), HandleTdEvent, &wiEvents);
+    otThreadDirectSetEventCallback(&wl.GetInstance(), HandleTdEvent, &wlEvents);
+
+    SuccessOrQuit(otThreadDirectWakeListenerEnable(&wl.GetInstance(), true));
+    VerifyOrQuit(otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    // Count 0 is one connection window at the rendezvous time. Interval stays non-zero.
+    wi.Get<WakeupTxScheduler>().SetConnectionRetryCount(0);
+
+    nexus.AdvanceTime(100);
+    StartWakeBurst(wi, wl);
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("RetryCount0 Step 3: Verify the WL accepts the Wake Frame");
+
+    for (uint32_t elapsedMs = 0; elapsedMs < 500; elapsedMs++)
+    {
+        nexus.AdvanceTime(1);
+
+        if (wlEvents.mWakeReceivedCount >= 1)
+        {
+            break;
+        }
+    }
+
+    VerifyOrQuit(wlEvents.mWakeReceivedCount == 1);
+    VerifyOrQuit(wlEvents.mLastWakeRetryCount == 0);
+    VerifyOrQuit(wlEvents.mLastWakeRetryInterval > 0);
+    VerifyOrQuit(!otThreadDirectIsWakeListenerEnabled(&wl.GetInstance()));
+
+    Log("---------------------------------------------------------------------------------------");
+    Log("RetryCount0 Step 4: Complete the handshake on the single rendezvous window");
+
+    nexus.AdvanceTime(kHandshakeTimeMs);
+
+    VerifyOrQuit(wiEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkedCount == 1);
+    VerifyOrQuit(wlEvents.mLinkFailedCount == 0);
+    VerifyOrQuit(wiEvents.mLinkFailedCount == 0);
+}
+
 } // namespace Nexus
 } // namespace ot
 
@@ -1028,12 +1597,25 @@ int main(void)
     setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_DEFAULT") ? getenv("OT_NEXUS_PCAP_FILE_DEFAULT") : ""),
            /*overwrite=*/1);
     ot::Nexus::TestTdLinkHandshake();
+    ot::Nexus::TestTdLinkHandshakeRetriesThenLinks();
+    ot::Nexus::TestTdLinkHandshakeRetriesExhausted();
+    ot::Nexus::TestTdLinkHandshakeChallengeMismatchExhaustsRetries();
+    ot::Nexus::TestTdLinkHandshakeRetryCountZeroLinks();
     ot::Nexus::TestTdLinkHandshakeLinksOnlyAfterWiFollowUp();
     ot::Nexus::TestTdLinkHandshakeWlTimeoutResumesListening();
 
     setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_GUEST") ? getenv("OT_NEXUS_PCAP_FILE_GUEST") : ""),
            /*overwrite=*/1);
     ot::Nexus::TestTdLinkHandshakeGuestKey();
+
+    setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_CLOCK_ACC") ? getenv("OT_NEXUS_PCAP_FILE_CLOCK_ACC") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdLinkHandshakeExchangesClockAccuracy();
+
+    setenv("OT_NEXUS_PCAP_FILE",
+           (getenv("OT_NEXUS_PCAP_FILE_GUEST_MISMATCH") ? getenv("OT_NEXUS_PCAP_FILE_GUEST_MISMATCH") : ""),
+           /*overwrite=*/1);
+    ot::Nexus::TestTdLinkHandshakeGuestKeyMismatchedNetworkKeys();
 
     setenv("OT_NEXUS_PCAP_FILE", (getenv("OT_NEXUS_PCAP_FILE_SCA") ? getenv("OT_NEXUS_PCAP_FILE_SCA") : ""),
            /*overwrite=*/1);
